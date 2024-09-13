@@ -8,26 +8,22 @@ import jwt
 from fastapi import APIRouter, Query, Depends, Request, Response
 from fastapi.responses import JSONResponse
 
-from config.auth import RoleInfo
-from endpoints import deps
-
-from provider.database import add_record, get_record_count
-from provider import database as provider_db
-
-from schemes.electric import BalanceRecord
-from schemes import electric as elec_schema
-from schemes.sql import PaginationConfig
-from schemes.electric import Statistics, BalanceRecord
-
 from exception import error as exc
 
 from config import auth as auth_conf
 from config import general as gene_conf
 from exception import error as exc
 
-from schemes.auth import TokenData
 
-auth_router = APIRouter()
+def check_password(original_password: str, hashed_password: str) -> bool:
+    """
+    Check the validity of a password against a hashed password
+
+    Returns:
+        bool value represents the check result
+    """
+    # todo
+    return True
 
 
 def auth_and_gen_jwt(role_need_to_auth: auth_conf.RoleInfo) -> str:

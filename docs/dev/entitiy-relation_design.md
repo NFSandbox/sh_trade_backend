@@ -4,11 +4,12 @@ In this wiki page, we will briefly discuss the design of the entities and relati
 
 ![User-Item-Trade ER Diagram](https://github.com/user-attachments/assets/0e8766b6-beb3-4ae0-9b97-a64ad2f2ee07)
 
-The image above illustrate the relationship between `Users` and `Item`.
+The image above illustrates the relationship between `Users` and `Item`.
 
-- A `TradeRecord` referenced to two different users, the `selle` and `buyer`.
+- A `TradeRecord` has references to two different users, the `seller` and `buyer`.
+- `TradeRecord` has a One-To-One relation with a single `Item`. The `status`(`交易状态`) field indicates the current state of the trade which is represented as an `Enum` type in Python and database.
 
-- One `TradeRecord` have an One-To-One relation to a single `Item`, and `status`(`交易状态`) indicates the current states of the trade. It will be represented as Enum value in Python and database.
+For info about how Python `Enum` works with SQLAlchemy, check out [SQLAlchemy Docs - Using Enum with ORM](https://docs.sqlalchemy.org/en/20/orm/declarative_tables.html#using-python-enum-or-pep-586-literal-types-in-the-type-map)
 
 ---
 
@@ -16,50 +17,46 @@ The image above illustrate the relationship between `Users` and `Item`.
 
 Image above shows sub ER diagram between `User` and `ContactInfo`.
 
-Our system allows a single user to have more than one single contact info. Users could add several personal contact info like QQ, WeChat, Phone Number and Email.
+Our system **allows each user to have several contact info entries**. Users could add several personal contact methods like QQ, WeChat, Phone Number and Email.
 
-This feature is implemented by creating a new entity `ContactInfo`, following is detailed explain of some of the field:
+This feature achieved by creating a new entity `ContactInfo`, Here is breakdown of some of its field:
 
-- `contact_info_type`(`平台`) actually indicates the type of the info, e.g.: `WeChat`.
-
-- `contact_info`(`平台ID`) contains the actual contact info with such type, e.g.: QQ Number for rows with `contact_info_type == 'QQ'`
+- `contact_info_type`(`平台`) specifies the type of the info, _(e.g.: `WeChat`)_.
+- `contact_info`(`平台ID`) stores the actual contact details with the specified type, _(e.g.: QQ Number for rows with `contact_info_type == 'QQ'`)_
 
 ---
 
 ![Item-Question ER Diagram](https://github.com/user-attachments/assets/ea63f404-3b29-4e08-aa72-3e855efbbb79)
 
-For each published `Item`, users (especially prospective buyers) are likely to ask some questions that had not been clearly stated in the item description.
+For each published `Item`, users (especially prospective buyers) often **have questions that aren't adequately addressed in the item description** written by seller.
 
-Taking the point above into consideration, this system allow any eligible users to ask questions on an specific `Item`.
+To accomodate such issue, our system allows any eligible user to ask question about a specific `Item`.
 
-- Any users can ask.
-
-- Question could be set to public or private. For public question, any users could read the question and answer.
-
-- Only creator of `Item` can reply.
+- Any users can ask questions about `Item`.
+- Question could be set to public or private. **Public question are visible to any users** including question and answer.
+- **Only seller `Item` can reply the question** relavant to the `Item`.
 
 ---
 
 ![Items-Tags ER Diagram](https://github.com/user-attachments/assets/1f5bcbaf-58ef-4691-8268-94ce89d14625)
 
-Image above describes the item-tag system entities design in this system. Users could add several tags to their published `Item`, and buyers could categorize their search or recommendation flow using `Tag`.
+Image above describes the item-tag system entities design in this system. Users could add several tags to their published `Item`, while buyers have the ability to categorize their search result or recommendation flow using `Tag` as filter.
 
 There is a very **classical Many-To-Many relation** between `Tag` and `Item` entity, that is:
 
 - An `Item` could have several `Tag` attributes.
-
 - There are several `Item` objects belongs to a single `Tag`.
 
-To achieve such relation, we used one more _association table_ besides two entities with only two fields: `tag_id` and `user_id`. Check out our ORM class code for more info.
+To achieve such relation, we used one more _association table_ besides two entities with only two fields: `tag_id` and `user_id` with both of them specified as Primary Key.
 
 # Outline & Overall ER Diagrams
 
-![Outline ER](https://github.com/user-attachments/assets/f14e6098-ca7a-4e60-b89d-03481399ecda)
+![Outline ER Diagram](https://github.com/user-attachments/assets/f14e6098-ca7a-4e60-b89d-03481399ecda)
 
-![Full ER](https://github.com/user-attachments/assets/9da5fafc-877b-4821-82e9-f6fb7b7a50f0)
+![Full ER Diagram](https://github.com/user-attachments/assets/9da5fafc-877b-4821-82e9-f6fb7b7a50f0)
 
 > [!note]
-> If you are suffering issues caused by low image quality or image load issues, you could check out **View ER Diagram DrawIO Project File Online** link in Refs chapter below.
+> If you are suffering issues caused by low image quality or image load issues, please check out **View ER Diagram DrawIO Project File Online** link in Refs chapter below.
 
 # Refs
 

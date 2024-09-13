@@ -50,6 +50,14 @@ class PaginationConfig(BaseModel):
         return select_stmt.limit(limit).offset(offset)
 
 
+user_role_association_table = Table(
+    'association_users_roles',
+    SQLBaseModel.metadata,
+    Column('user_id', ForeignKey('user.user_id'), primary_key=True),
+    Column('role_id', ForeignKey('role.role_id'), primary_key=True),
+)
+
+
 class User(SQLBaseModel):
     __tablename__ = 'user'
 
@@ -64,6 +72,10 @@ class User(SQLBaseModel):
     sells: Mapped[List['TradeRecord']] = relationship(back_populates='seller')
     buys: Mapped[List['TradeRecord']] = relationship(back_populates='buyer')
     contact_info: Mapped[List['ContactInfo']] = relationship(back_populates='user')
+    roles: Mapped[List['Role']] = relationship(
+        secondary=user_role_association_table,
+        back_populates='users'
+    )
 
 
 class ContactInfoType(Enum):
@@ -165,4 +177,16 @@ class Tag(SQLBaseModel):
     items: Mapped[List['Item']] = relationship(
         secondary=association_items_tags,
         back_populates='tags'
+    )
+
+
+class Role(SQLBaseModel):
+    __tablename__ = 'role'
+
+    role_id: Mapped[IntPrimaryKey]
+    role_name: Mapped[NormalString]
+
+    users: Mapped[List['User']] = relationship(
+        secondary=user_role_association_table,
+        back_populates='roles'
     )

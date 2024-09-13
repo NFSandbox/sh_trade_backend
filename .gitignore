@@ -165,3 +165,6 @@ archive.zip
 
 # test files
 /test*.*
+
+# Microsoft doc files
+*.docx
