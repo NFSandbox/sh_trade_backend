@@ -12,15 +12,17 @@ _engine = create_async_engine(
     f"@{sql.DB_HOST}/{sql.DB_NAME}"
 )
 
-# async version sessionmaker
-# call init_sessionmaker() before use this instance
+# async version session maker
+# call get_session_maker() before use this instance
 session_maker: async_sessionmaker | None = async_sessionmaker(_engine, expire_on_commit=False)
 
 
-async def init_sessionmaker(force_create: bool = False) -> async_sessionmaker:
+def init_session_maker(force_create: bool = False) -> async_sessionmaker:
     """
-    (Async) Tool function to initialize the session maker if it's not ready.
-    :return: None
+    Get the current session maker instance, create one if not exists.
+
+    Parameters:
+    - ``force_create`` Always create new session maker if ``True``
     """
     global session_maker
     if (session_maker is None) or force_create:

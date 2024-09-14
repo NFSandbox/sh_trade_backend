@@ -12,12 +12,9 @@ from loguru import logger
 from exception.error import BaseError, BaseErrorOut
 
 import config
-from provider import ahu
 
 # sub routers
-from endpoints.info import infoRouter
-from endpoints.auth import auth_router
-from endpoints.ahu import ahu_router
+from endpoints.auth import auth_router, token_router
 
 # CORS Middleware
 middlewares = [
@@ -32,9 +29,8 @@ middlewares = [
 
 # include sub routers
 app = FastAPI(middleware=middlewares)
-app.include_router(infoRouter, prefix="/info", tags=["Info"])
+app.include_router(token_router,  tags=["Token"])
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
-app.include_router(ahu_router, prefix="/ahu", tags=["AHU"])
 
 
 @app.exception_handler(BaseError)

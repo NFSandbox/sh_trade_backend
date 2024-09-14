@@ -1,12 +1,13 @@
-from pydantic import BaseModel
+from typing import Literal
 
-from config.auth import RoleInfo
+from pydantic import BaseModel
 
 
 class BaseError(Exception):
     """
     Base error class for backend application
     """
+
     name: str
     message: str
     status: int
@@ -29,6 +30,7 @@ class BaseErrorOut(BaseModel):
     """
     Class that used to convert BaseError to a pydantic class that could be passed to frontend through API.
     """
+
     name: str
     message: str
     status: int
@@ -43,9 +45,12 @@ class NoResultError(BaseError):
     Raise when could not find any result satisfying condition from database.
     """
 
-    def __init__(self, message: str = 'Could not found any result satisfying condition from database.') -> None:
+    def __init__(
+        self,
+        message: str = "Could not found any result satisfying condition from database.",
+    ) -> None:
         super().__init__(
-            name='no_result',
+            name="no_result",
             message=message,
             status=404,
         )
@@ -58,19 +63,27 @@ class AuthError(BaseError):
     Check `__init__()` for more info.
     """
 
-    def __init__(self, role: RoleInfo | None, has_match: bool = False):
+    def __init__(
+        self,
+        invalid_contact: bool = False,
+        invalid_password: bool = False,
+    ):
         """
         Create an `AuthError` instance.
 
-        :param role: RoleInfo instance used to generate error. Generally pass the roleInfo that user passed to backend.
-        :param has_match: If `true`, means the role name has matched with a valid role, but password incorrect.
+        Parameters:
+
+        - ``invalid_contact`` Set to true if error caused by invalid contact info
+        - ``invalid_password`` Set to true if error caused by invalid password
         """
-        err_msg: str = 'User authentication failed, please check if you passed the correct role name and password'
-        if role is not None:
-            err_msg = f'Role info not valid. Role "{role.name}" is not a valid role in system'
-        if has_match:
-            err_msg = f'Password incorrect for role named {role.name}'
-        super().__init__(name='auth_error', message=err_msg, status=401)  # return unauthorized response
+        err_msg: str = (
+            "User authentication failed, please check if you passed the correct role name and password"
+        )
+        if invalid_contact:
+            err_msg = f"Invalid account info or username"
+        if invalid_password:
+            err_msg = f"Incorrect password"
+        super().__init__(name="auth_error", message=err_msg, status=401)
 
 
 class TokenError(BaseError):
@@ -81,21 +94,22 @@ class TokenError(BaseError):
 
     Params:
 
+    - `invalid_token` Token is invalid, for example, not matching the JWT format
     - `expired` Token expired.
-    - `role_not_match` Token exists, but role not match.
     - `no_token` Pass `True` when error is occurred because of token could not be found.
     - `message` If `None`, will automatically determined by the error cause. Use default if no cause provided.
     - `message` If not `None`, always use the received one as final message despite presets of error cause.
     """
 
     def __init__(
-            self,
-            message: str | None = None,
-            expired: bool | None = None,
-            role_not_match: bool | None = None,
-            no_token: bool | None = None,
+        self,
+        message: str | None = None,
+        invalid_format: bool | None = None,
+        expired: bool | None = None,
+        role_not_match: bool | None = None,
+        no_token: bool | None = None,
     ) -> None:
-        final_name = 'token_error'
+        final_name = "token_error"
         final_message = message
         """
         Create an `TokenError` instance.
@@ -104,29 +118,29 @@ class TokenError(BaseError):
         :param role_not_match: If `true`, indicates the role are not match the requirements.
         """
         if message is None:
-            message = 'Could not verify the user tokens'
+            message = "Could not verify the user tokens"
+
+        if invalid_format:
+            final_name = "invalid_token_format"
+            message = "Invalid token format, please try logout and login again"
 
         if expired:
-            final_name = 'token_expired'
-            message = 'Token expired, try login again to get a new token'
+            final_name = "token_expired"
+            message = "Token expired, try login again to get a new token"
 
         if role_not_match:
-            final_name = 'token_role_not_match'
-            message = 'Current role are not match the requirements to perform this operation or access this resources'
+            final_name = "token_role_not_match"
+            message = "Current role are not match the requirements to perform this operation or access this resources"
 
         if no_token:
-            final_name = 'token_required'
-            message = 'Could not found a valid token, try login to an valid account'
+            final_name = "token_required"
+            message = "Could not found a valid token, try login to an valid account"
 
         # only when message is None, then use presets, otherwise always use the original message passed.
         if final_message is None:
             final_message = message
 
-        super().__init__(
-            name=final_name,
-            message=final_message,
-            status=401
-        )
+        super().__init__(name=final_name, message=final_message, status=401)
 
 
 class ParamError(BaseError):
@@ -139,7 +153,7 @@ class ParamError(BaseError):
 
     def __init__(self, param_name: str, message: str) -> None:
         super().__init__(
-            'param_error',
+            "param_error",
             f'Param error, "{param_name}": {message}',
             400,
         )
@@ -152,9 +166,9 @@ class AHUHeaderError(BaseError):
 
     def __init__(self):
         super().__init__(
-            name='ahu_header_error',
-            message='AHU Header provided are invalid, data could not be retrieved from AHU website.',
-            status=404
+            name="ahu_header_error",
+            message="AHU Header provided are invalid, data could not be retrieved from AHU website.",
+            status=404,
         )
 
 
@@ -165,8 +179,8 @@ class AHUInfoParseError(BaseError):
 
     def __init__(self, received_text_info: str):
         super().__init__(
-            name='ahu_parse_error',
-            message=f'Failed to parse the return info from AHU website on the server side. '
-                    f'Received text info is: {received_text_info}',
+            name="ahu_parse_error",
+            message=f"Failed to parse the return info from AHU website on the server side. "
+            f"Received text info is: {received_text_info}",
             status=404,
         )
