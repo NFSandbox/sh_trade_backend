@@ -11,11 +11,15 @@ from fastapi import APIRouter, Query, Depends, Request, Response, status, Body
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 
+from sqlalchemy.exc import MultipleResultsFound
+
 from config import auth as auth_conf
 from schemes import auth as auth_sche
 from schemes import db as db_sche
 from schemes import sql as orm
 from provider import auth as auth_provider
+from provider import user as user_provider
+from provider import database as db_provider
 from exception import error as exc
 
 from schemes import auth as auth_schema
@@ -45,29 +49,27 @@ def verify_password(original_password: str, hashed_password: str) -> bool:
     Returns:
         bool value represents the check result
     """
-    logger.debug(f"Verifying: Original: {original_password}, hashed: {hashed_password}")
 
     return passlib_context.verify(original_password, hashed_password)
 
 
-async def check_password_with_db(contact_info: str, password: str):
-    """
-    Verify username and password using the data in database
+async def check_password_with_db(
+    session: db_provider.SessionDep, contact_info: str, password: str
+):
+    """Verify username and password using the data in database
 
-    Parameters:
-
-    - ``contact_info`` Contact info user provided
-    - ``password`` Password user provided
+    Args:
+        contact_info (str): contact info
+        contact_info: Contact info user provided
+        password: Password user provided
 
     Return:
-        ORM User instance if verified
+        user: ORM User instance if verified
 
-    Exceptions:
-
-    - Raise ``AuthError`` if the password is incorrect or contact info is invalid
+    Raises:
+        AuthError: if the password is incorrect or contact info is invalid
     """
-    user = await auth_provider.get_user_by_contact_info(contact_info)
-    logger.debug(f"Got user from contact! Username: {user.username}")
+    user = await auth_provider.get_user_by_contact_info(session, contact_info)
 
     # invalid contact info
     if user is None:
@@ -83,10 +85,12 @@ async def check_password_with_db(contact_info: str, password: str):
     return user
 
 
-async def login_for_token(username: str, password: str):
+async def login_for_token(
+    session: db_provider.SessionDep, username: str, password: str
+):
     # get user info based on auth credentials
     try:
-        user = await check_password_with_db(username, password)
+        user = await check_password_with_db(session, username, password)
     except exc.AuthError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -105,28 +109,14 @@ async def login_for_token(username: str, password: str):
     )
 
 
-@token_router.post("/token")
-async def login_for_token_from_form_data(
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    resp: Response,
-) -> auth_sche.TokenOut:
-    logger.debug("Into /token")
-    token = await login_for_token(form_data.username, form_data.password)
-    resp.set_cookie(
-        key=auth_conf.JWT_FRONTEND_COOKIE_KEY,
-        value=token.access_token,
-        max_age=auth_conf.TOKEN_EXPIRES_DELTA_HOURS * 60 * 60,
-    )
-    return token
-
-
 @auth_router.post("/token")
 async def login_for_token_from_json(
     username: Annotated[str, Body()],
     password: Annotated[str, Body()],
     resp: Response,
+    session: db_provider.SessionDep,
 ) -> auth_sche.TokenOut:
-    token = await login_for_token(username, password)
+    token = await login_for_token(session, username, password)
     resp.set_cookie(
         key=auth_conf.JWT_FRONTEND_COOKIE_KEY,
         value=token.access_token,
@@ -151,61 +141,6 @@ async def get_current_user_use_header(
     return token_data
 
 
-async def get_current_user_use_cookies(req: Request):
-    """
-    Get current user based on user token
-    """
-
-    # no token
-    token = req.cookies.get(auth_conf.JWT_FRONTEND_COOKIE_KEY)
-    if token is None:
-        raise exc.TokenError(no_token=True)
-
-    token_data = auth_sche.TokenData.from_jwt_str(token)
-
-    # token expired
-    if token_data.is_expired():
-        raise exc.TokenError(expired=True)
-
-    return token_data
-
-
-# def require_role(
-#     role_list: list[str],
-# ):
-#     """
-#     A dependency function generator used to generate a dependency function used by FastAPI to
-#     require a certain role.
-#
-#     The generated dependency function will return the name of the role as a string
-#     if verify passed. Else raise ``TokenError``.
-#
-#     :param role_list: A list of string represents the roles that could pass the verification.
-#
-#     Exceptions:
-#
-#     - `token_expired`
-#     - `token_role_not_match`
-#     - `token_required`
-#
-#     > Here exceptions means what error the generated dependency function may throw, not generator itself.
-#
-#     Checkout `TokenError` class for more info.
-#     """
-#
-#     def generated_role_requirement_func(req: Request):
-#         jwt_str = req.cookies.get(auth_conf.JWT_FRONTEND_COOKIE_KEY)
-#         if jwt_str is None:
-#             raise exc.TokenError(no_token=True)
-#
-#         # convert jwt string to token data
-#         token_data = TokenData.from_jwt(jwt_str=jwt_str)
-#         token_data.try_verify(role_list)
-#         return token_data.role_name
-#
-#     return generated_role_requirement_func
-
-
 @auth_router.get("/logout")
 async def logout_account():
     resp = JSONResponse(status_code=200, content={"is_logged_out": True})
@@ -213,8 +148,60 @@ async def logout_account():
     return resp
 
 
-@auth_router.get("/user_test", response_model=auth_schema.TokenData)
-async def get_current_user_info(
-    token_data: Annotated[auth_schema.TokenData, Depends(get_current_user_use_cookies)]
+@auth_router.get("/test/token_dependency", response_model=auth_schema.TokenData)
+async def get_current_token_info(
+    token_data: Annotated[
+        auth_schema.TokenData, Depends(user_provider.get_current_token)
+    ]
 ):
     return token_data
+
+
+@auth_router.get(
+    "/test/user_dependency",
+    response_model=db_sche.UserOut,
+    response_model_exclude_none=True,
+)
+async def get_current_user_info(
+    user: Annotated[orm.User, Depends(user_provider.get_current_user)]
+):
+    return user
+
+
+@auth_router.post("/register", response_model=db_sche.UserOut)
+async def register_new_user(
+    ss: db_provider.SessionDep,
+    info: Annotated[db_sche.UserIn, Body(embed=False)],
+    resp: Response,
+):
+    try:
+        # create new user
+        new_user = orm.User(
+            username=info.username, password=passlib_context.hash(info.password)
+        )
+        ss.add(new_user)
+
+        # auto login reusing endpoint function
+        # this part also take charge of raising error if username duplicated
+        # since if duplicated, there will be two users shared the same `new_user.username`
+        try:
+            await login_for_token_from_json(
+                new_user.username,
+                info.password,
+                session=ss,
+                resp=resp,
+            )
+        except MultipleResultsFound:
+            raise exc.BaseError(
+                name="username_already_exists",
+                message="Username input has already used by other users, please try another username.",
+            )
+
+        # commit
+        await ss.commit()
+        return new_user
+
+    except:
+        logger.debug("Database rolling back...")
+        await ss.rollback()
+        raise

@@ -3,7 +3,7 @@ from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.requests import Request
-from fastapi.exceptions import HTTPException
+from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.exception_handlers import http_exception_handler
 
 import uvicorn
@@ -15,6 +15,7 @@ import config
 
 # sub routers
 from endpoints.auth import auth_router, token_router
+from endpoints.user import user_router
 
 # CORS Middleware
 middlewares = [
@@ -29,12 +30,33 @@ middlewares = [
 
 # include sub routers
 app = FastAPI(middleware=middlewares)
-app.include_router(token_router,  tags=["Token"])
+app.include_router(token_router, tags=["Token"])
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
+app.include_router(user_router, prefix="/user", tags=["User"])
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, e):
+    e = e.errors()
+    first_exc = e[0]
+    logger.error(first_exc)
+    return await http_exception_handler(
+        request,
+        HTTPException(
+            status_code=422,
+            detail=BaseError(
+                name="validation_error",
+                message=f"{first_exc['msg']}. Location: {first_exc['loc']}. ({first_exc['type']})",
+                status=400,
+            )
+            .to_pydantic_base_error()
+            .model_dump(),
+        ),
+    )
 
 
 @app.exception_handler(BaseError)
-async def base_error_handler(request: Request, exc: BaseError):
+async def base_error_handler(request: Request, e: BaseError):
     """
     An error handler used to handle all subclass of BaseError class.
 
@@ -43,7 +65,28 @@ async def base_error_handler(request: Request, exc: BaseError):
     return await http_exception_handler(
         request,
         HTTPException(
-            status_code=exc.status, detail=exc.to_pydantic_base_error().model_dump()
+            status_code=e.status, detail=e.to_pydantic_base_error().model_dump()
+        ),
+    )
+
+
+@app.exception_handler(Exception)
+async def internal_error_handler(request: Request, e: Exception):
+    """
+    Default error handler, deal with errors that not been caught by previous two handlers
+    """
+    logger.exception(e)
+    return await http_exception_handler(
+        request,
+        HTTPException(
+            status_code=500,
+            detail=BaseError(
+                name="internal_server_error",
+                message="An error occurred in server-side. If error persists, please contact website admin",
+                status=500,
+            )
+            .to_pydantic_base_error()
+            .model_dump(),
         ),
     )
 

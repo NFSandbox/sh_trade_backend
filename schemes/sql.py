@@ -1,12 +1,21 @@
+import time
 from enum import Enum
 from typing import Annotated, List
+from loguru import logger
 
 from pydantic import BaseModel
 from sqlalchemy import Select, BIGINT, String, ForeignKey, Column, Table
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.ext.asyncio import AsyncAttrs
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+    MappedAsDataclass,
+)
 
 
-class SQLBaseModel(DeclarativeBase):
+class SQLBaseModel(AsyncAttrs, DeclarativeBase):
     deleted: Mapped[bool] = mapped_column(default=False)
 
     type_annotation_map = {int: BIGINT}
@@ -18,7 +27,7 @@ NormalString = Annotated[str, mapped_column(String(20))]
 LongString = Annotated[str, mapped_column(String(100))]
 VeryLongString = Annotated[str, mapped_column(String(500))]
 ParagraphString = Annotated[str, mapped_column(String(2000))]
-TimeStamp = Annotated[int, mapped_column()]
+TimeStamp = Annotated[int, mapped_column(default=int(time.time()))]
 
 
 class PaginationConfig(BaseModel):
@@ -62,11 +71,11 @@ class User(SQLBaseModel):
 
     user_id: Mapped[IntPrimaryKey]
 
-    campus_id: Mapped[NormalString] = mapped_column(nullable=True)
-    username: Mapped[NormalString]
+    campus_id: Mapped[NormalString | None]
+    username: Mapped[NormalString] = mapped_column(unique=True)
     password: Mapped[LongString] = mapped_column()
     description: Mapped[LongString] = mapped_column(nullable=True)
-    created_at: Mapped[TimeStamp]
+    created_time: Mapped[TimeStamp]
 
     sells: Mapped[List["TradeRecord"]] = relationship(
         back_populates="seller", foreign_keys="TradeRecord.seller_id"
@@ -78,6 +87,33 @@ class User(SQLBaseModel):
     roles: Mapped[List["Role"]] = relationship(
         secondary=user_role_association_table, back_populates="users"
     )
+
+    async def verify_role(self, roles: str | list[str]) -> bool:
+        """Check if this user has some roles
+
+        Args:
+            roles: A str or a list of str. Represents the allowed roles for this verification
+
+        Returns:
+            `True`: If this user has **one of the allowedroles** in the `roles` parameters
+            `False`: Else case
+
+        Notes:
+
+        Please ensure the relavant session of this instance is still active,
+        since the `roles` relationship info is retrieved using *Awaitable Attributes*.
+        """
+        # get user roles
+        roles_of_this_user: list[Role] = await self.awaitable_attrs.roles
+        logger.debug(f"User: {self}, roles: {roles_of_this_user}, required: {roles}")
+
+        # iterate through user's roles.
+        # once one of the user role is in the allowed role list, pass the test
+        for user_role in roles_of_this_user:
+            if user_role.role_name in roles:
+                return True
+
+        return False
 
 
 class ContactInfoType(Enum):
