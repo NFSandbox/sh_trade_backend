@@ -129,6 +129,12 @@ class Item(SQLBaseModel):
     )
 
 
+class TradeState(Enum):
+    processing = "processing"
+    success = "success"
+    cancelled = "cancelled"
+
+
 class TradeRecord(SQLBaseModel):
     __tablename__ = "trade"
 
@@ -138,8 +144,10 @@ class TradeRecord(SQLBaseModel):
     buyer_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
     item_id: Mapped[int] = mapped_column(ForeignKey("item.item_id"))
 
-    review_from_buyer: Mapped[ParagraphString] = mapped_column()
-    review_from_seller: Mapped[ParagraphString] = mapped_column()
+    created_time: Mapped[TimeStamp]
+    review_from_buyer: Mapped[ParagraphString | None]
+    review_from_seller: Mapped[ParagraphString | None]
+    state: Mapped[TradeState] = mapped_column(default=TradeState.processing)
 
     seller: Mapped["User"] = relationship(
         back_populates="sells", foreign_keys=[seller_id]
