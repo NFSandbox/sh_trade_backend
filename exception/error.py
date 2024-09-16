@@ -177,7 +177,7 @@ class ParamError(BaseError):
         super().__init__(
             "param_error",
             f'Param error, "{param_name}": {message}',
-            400,
+            httpstatus.HTTP_400_BAD_REQUEST,
         )
 
 

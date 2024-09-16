@@ -38,8 +38,8 @@ class PaginationConfig(BaseModel):
         pagi_conf = PaginationConfig(size=..., limit=...)
         pagi_conf.use_on(stmt)
 
-    Also since this class is extend from ``pydantic.BaseModel``, so it can be used as a dependency of
-    FastAPI method::
+    Also since this class is extend from `pydantic.BaseModel`, so it can be used as a dependency of
+    FastAPI method:
 
         @fastApiRouter.get('/test')
         def test_endpoint(pagi_conf : PaginationConfig):
@@ -77,16 +77,15 @@ class User(SQLBaseModel):
     description: Mapped[LongString] = mapped_column(nullable=True)
     created_time: Mapped[TimeStamp]
 
-    sells: Mapped[List["TradeRecord"]] = relationship(
-        back_populates="seller", foreign_keys="TradeRecord.seller_id"
-    )
     buys: Mapped[List["TradeRecord"]] = relationship(
         back_populates="buyer", foreign_keys="TradeRecord.buyer_id"
     )
     contact_info: Mapped[List["ContactInfo"]] = relationship(back_populates="user")
     roles: Mapped[List["Role"]] = relationship(
-        secondary=user_role_association_table, back_populates="users"
+        secondary=user_role_association_table,
+        back_populates="users",
     )
+    items: Mapped[List["Item"]] = relationship(back_populates="seller")
 
     async def verify_role(self, roles: str | list[str]) -> bool:
         """Check if this user has some roles
@@ -100,6 +99,8 @@ class User(SQLBaseModel):
 
         Notes:
 
+        Deleted roles will be ignored.
+
         Please ensure the relavant session of this instance is still active,
         since the `roles` relationship info is retrieved using *Awaitable Attributes*.
         """
@@ -110,6 +111,8 @@ class User(SQLBaseModel):
         # iterate through user's roles.
         # once one of the user role is in the allowed role list, pass the test
         for user_role in roles_of_this_user:
+            if user_role.deleted:
+                continue
             if user_role.role_name in roles:
                 return True
 
@@ -153,6 +156,7 @@ class Item(SQLBaseModel):
     item_id: Mapped[IntPrimaryKey] = mapped_column()
 
     user_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
+
     name: Mapped[NormalString]
     description: Mapped[ParagraphString] = mapped_column(nullable=True)
     price: Mapped[int] = mapped_column()
@@ -163,6 +167,7 @@ class Item(SQLBaseModel):
     tags: Mapped[List["Tag"]] = relationship(
         secondary=association_items_tags, back_populates="items"
     )
+    seller: Mapped["User"] = relationship(back_populates="items")
 
 
 class TradeState(Enum):
@@ -176,7 +181,6 @@ class TradeRecord(SQLBaseModel):
 
     trade_id: Mapped[IntPrimaryKey]
 
-    seller_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
     buyer_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
     item_id: Mapped[int] = mapped_column(ForeignKey("item.item_id"))
 
@@ -185,9 +189,6 @@ class TradeRecord(SQLBaseModel):
     review_from_seller: Mapped[ParagraphString | None]
     state: Mapped[TradeState] = mapped_column(default=TradeState.processing)
 
-    seller: Mapped["User"] = relationship(
-        back_populates="sells", foreign_keys=[seller_id]
-    )
     buyer: Mapped["User"] = relationship(back_populates="buys", foreign_keys=[buyer_id])
     item: Mapped["Item"] = relationship(back_populates="record")
 
