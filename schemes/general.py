@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, NonNegativeInt
 
 
 class BackendInfoOut(BaseModel):
@@ -13,4 +13,7 @@ class BlukOpeartionInfo(BaseModel):
 
     success: bool = True
     operation: str | None = None
-    total: int
+    total: NonNegativeInt = 0
+
+    def inc(self, delta: int = 1):
+        self.total += delta

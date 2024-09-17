@@ -90,27 +90,21 @@ async def add_item(ss: SessionDep, item: db_sche.ItemIn, user: CurrentUserDep):
     return new_item
 
 
-@item_router.delete("/remove_all")
+@item_router.delete("/remove_all", response_model=List[gene_sche.BlukOpeartionInfo])
 async def remove_all_items(ss: SessionDep, user: CurrentUserDep):
     """
     Remove all items of current user
-    
+
     This will also remove all questions related to this item
     """
     # remove all items belongs to this user
     await user.awaitable_attrs.items
-    remove_count = 0
-    for i in user.items:
-        if i.deleted == False:
-            remove_count += 1
-            i.deleted = True
+
+    bulk_res = await item_provider.remove_items_cascade(ss, user.items)
 
     try:
         await ss.commit()
-        await item_provider.clean_up_question_with_deleted_items(ss)
-        return gene_sche.BlukOpeartionInfo(
-            operation="Remove all items of current user", total=remove_count
-        )
+        return bulk_res
     except:
         await ss.rollback()
         raise

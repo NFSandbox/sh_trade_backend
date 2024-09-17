@@ -1,4 +1,4 @@
-from typing import Annotated, cast, List
+from typing import Annotated, cast, List, Sequence
 
 from loguru import logger
 from sqlalchemy import select, update, func, Column, distinct
@@ -12,6 +12,7 @@ from config import auth as auth_conf
 
 from schemes import sql as orm
 from schemes import db as db_sche
+from schemes import general as gene_sche
 
 from .database import init_session_maker, session_maker, SessionDep
 from .user import CurrentUserDep, CurrentUserOrNoneDep, get_user_from_user_id
@@ -150,8 +151,78 @@ async def item_belong_to_user(ss: SessionDep, item_id: int, user_id: int):
         )
 
 
-async def get_cascade_items_from_users(ss: SessionDep, users: orm.User):
-    pass
+async def get_cascade_items_from_users(
+    ss: SessionDep, users: Sequence[orm.User], exclude_deleted: bool = True
+):
+    """
+    Get a list of sellers(`User`) from a list of items(`Item`)
+    """
+
+    # construct statement
+    stmt = (
+        select(orm.Item)
+        .join(orm.Item.seller)
+        .where(orm.User.user_id.in_([u.user_id for u in users]))
+    )
+    if exclude_deleted:
+        stmt = stmt.where(orm.Item.deleted == False)
+
+    res = await ss.scalars(stmt)
+    items = res.all()
+
+    return items
+
+
+async def get_cascade_questions_from_items(
+    ss: SessionDep, items: Sequence[orm.Item], exclude_deleted: bool = True
+):
+    stmt = (
+        select(orm.Question)
+        .join(orm.Question.item)
+        .where(orm.Item.item_id.in_([i.item_id for i in items]))
+    )
+
+    if exclude_deleted:
+        stmt = stmt.where(orm.Question.deleted == False)
+
+    res = await ss.scalars(stmt)
+    return res.all()
+
+
+async def remove_items_cascade(
+    ss: SessionDep, items: Sequence[orm.Item]
+) -> List[gene_sche.BlukOpeartionInfo]:
+    """
+    Soft delete a list of items, with cascade delete of all relavant data
+
+    Cascade
+
+    - `Question` All question related to these items
+    """
+    # record the effective delete count of all entities
+    q_count = gene_sche.BlukOpeartionInfo(operation="Cascading delete questions")
+    i_count = gene_sche.BlukOpeartionInfo(operation="Delete items")
+    try:
+        # delete question cascade of item
+        questions = await get_cascade_questions_from_items(ss, items)
+        for q in questions:
+            if not q.deleted:
+                q_count.inc()
+            q.deleted = True
+
+        # delete items itself
+        for i in items:
+            if not i.deleted:
+                i_count.inc()
+            i.deleted = True
+
+        await ss.commit()
+
+        # return info
+        return [i_count, q_count]
+    except:
+        await ss.rollback()
+        raise
 
 
 async def clean_up_question_with_deleted_items(ss: SessionDep):
