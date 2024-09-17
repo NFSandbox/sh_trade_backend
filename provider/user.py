@@ -97,7 +97,7 @@ async def get_user_from_user_id(
         add_eager_load_to_stmt(stmt, eager_load)
     try:
         res = (await session.scalars(stmt)).one()
-    except sqlexc.NoSuchColumnError as e:
+    except sqlexc.NoResultFound as e:
         raise exc.NoResultError(message=f"User with id:{user_id} not exists") from e
 
     return res
@@ -131,7 +131,7 @@ async def check_duplicate_contacts(ss: SessionDep, info: db_sche.ContactInfoIn) 
     )
     res = await ss.scalars(check_dup_stmt)
     res = res.one()
-    if res > 1:
+    if res > 0:
         raise exc.BaseError(
             name="contact_info_already_exists",
             message="Contact info already exists or used by others",
@@ -170,16 +170,21 @@ async def get_all_active_buyers(ss: SessionDep, user_id: int):
     - Active buyer of a user means all other users that have **active processing trade records
       of an item owned by this user**
     """
-    buyer_user = aliased(orm.User)
-    seller_user = aliased(orm.User)
+
+    user1 = aliased(orm.User)
+    item1 = aliased(orm.Item)
 
     # all items selling by seller
     _subq_seller_valid_items = (
-        select(orm.Item)
-        .join_from(orm.User, orm.User.items)
-        .where(orm.User.user_id == user_id)
-        .where(orm.Item.deleted == False)
-        .where(orm.Item.state == orm.ItemState.valid)
+        select(item1)
+        .select_from(user1)
+        .join(
+            user1.items.of_type(item1)
+            .and_(user1.deleted == False)
+            .and_(user1.user_id == user_id)
+        )
+        .where(item1.deleted == False)
+        .where(item1.state == orm.ItemState.valid)
         .subquery()
     )
 
@@ -187,10 +192,14 @@ async def get_all_active_buyers(ss: SessionDep, user_id: int):
 
     # all trade record with those items
     _subq_valid_trades = (
-        select(orm.TradeRecord)
-        .join_from(valid_item, valid_item.record)
-        .where(orm.TradeRecord.deleted == False)
-        .where(orm.TradeRecord.state == orm.TradeState.processing)
+        select(orm.TradeRecord).join_from(
+            valid_item,
+            valid_item.record.and_(orm.TradeRecord.deleted == False).and_(
+                orm.TradeRecord.state == orm.TradeState.processing
+            ),
+        )
+        # .where(orm.TradeRecord.deleted == False)
+        # .where(orm.TradeRecord.state == orm.TradeState.processing)
         .order_by(orm.TradeRecord.created_time.desc())
     ).subquery()
 
@@ -216,6 +225,8 @@ async def check_get_contact_info_permission(
 ):
     """Check if a specific user has the permission to access another user's contact info
 
+
+
     Return None if check passed. Raise error if insufficient permission
 
     Args
@@ -223,19 +234,22 @@ async def check_get_contact_info_permission(
     - `requester_id`: `user_id` of requester
     - `user_id`: `user_id` of the user whose contact info is being requested
 
-    Returns:
+    Returns
 
     - None
 
-    Raises:
+    Raises
 
     - `permission_required`
     - `no_result`
+
+    For more info about permission check related to contact info, check out
+    [this Wiki page](https://github.com/NFSandbox/sh_trade_backend/wiki/User-Contact-Info)
     """
     # promise this two user is exists and valid
     try:
         requester = await get_user_from_user_id(ss, requester_id)
-        user = await get_user_from_user_id(ss, requester_id)
+        user = await get_user_from_user_id(ss, user_id)
     except exc.NoResultError as e:
         raise exc.NoResultError(
             message="Could not found requester or user by provided user ID"
@@ -247,8 +261,12 @@ async def check_get_contact_info_permission(
 
     # get all valid buyers list, check if the requested user in this list
     buyer_list = await get_all_active_buyers(ss, requester_id)
+    # for buyer in buyer_list:
+    #     if buyer.user_id == user.user_id:
+    #         return
     if user in buyer_list:
         return
+
     # raise error
     raise exc.PermissionError(
         roles=await requester.awaitable_attrs.roles,
@@ -256,5 +274,21 @@ async def check_get_contact_info_permission(
     )
 
 
-def get_user_contact_info_list(ss: SessionDep, user: orm.User):
-    pass
+async def get_user_contact_info_list(ss: SessionDep, user: orm.User):
+    """
+    Return list of contact info of the user
+
+    Notice that is function do not contain any permission check
+    """
+    contact_list = await ss.scalars(
+        select(orm.ContactInfo)
+        .select_from(orm.User)
+        .join(
+            orm.User.contact_info.and_(orm.User.user_id == user.user_id).and_(
+                orm.ContactInfo.deleted == False
+            )
+        )
+    )
+    contact_list = contact_list.all()
+
+    return contact_list

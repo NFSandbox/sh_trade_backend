@@ -86,16 +86,42 @@ async def add_user_contact_info(
     return info
 
 
-@user_router.get("/contact_info")
-async def get_all_contact_infO(
+@user_router.get("/contact_info", response_model=List[db_sche.ContactInfoIn])
+async def get_user_contact_info(
     ss: SessionDep,
     current_user: user_provider.CurrentUserDep,
     user_id: int,
 ):
+    # check permission (raise if failed)
     await user_provider.check_get_contact_info_permission(
         ss,
         requester_id=current_user.user_id,
         user_id=user_id,
     )
 
-    return True
+    # retrieve info
+    contact_info_list = await user_provider.get_user_contact_info_list(
+        ss, await user_provider.get_user_from_user_id(ss, user_id)
+    )
+
+    return contact_info_list
+
+
+@user_router.post("/contact_info/remove")
+async def remove_user_contact_info(
+    ss: SessionDep, user: user_provider.CurrentUserDep, info: db_sche.ContactInfoIn
+):
+    contact_info_list = await user_provider.get_user_contact_info_list(ss, user)
+
+    for info_orm in contact_info_list:
+        if (
+            info_orm.contact_type == info.contact_type
+            and info_orm.contact_info == info.contact_info
+        ):
+            info_orm.deleted = True
+
+    try:
+        await ss.commit()
+    except:
+        await ss.rollback()
+        raise

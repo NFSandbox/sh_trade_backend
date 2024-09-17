@@ -131,7 +131,7 @@ class ContactInfo(SQLBaseModel):
 
     user_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
     contact_type: Mapped[ContactInfoType] = mapped_column()
-    contact_info: Mapped[LongString] = mapped_column(unique=True)
+    contact_info: Mapped[LongString] = mapped_column()
 
     user: Mapped["User"] = relationship(back_populates="contact_info")
 
