@@ -16,6 +16,7 @@ import config
 # sub routers
 from endpoints.auth import auth_router, token_router
 from endpoints.user import user_router
+from endpoints.item import item_router
 
 # CORS Middleware
 middlewares = [
@@ -33,6 +34,7 @@ app = FastAPI(middleware=middlewares)
 app.include_router(token_router, tags=["Token"])
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/user", tags=["User"])
+app.include_router(item_router, prefix="/item", tags=["Item"])
 
 
 @app.exception_handler(RequestValidationError)
@@ -47,7 +49,7 @@ async def validation_exception_handler(request, e):
             detail=BaseError(
                 name="validation_error",
                 message=f"{first_exc['msg']}. Location: {first_exc['loc']}. ({first_exc['type']})",
-                status=400,
+                status=422,
             )
             .to_pydantic_base_error()
             .model_dump(),

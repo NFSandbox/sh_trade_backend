@@ -18,20 +18,14 @@ from .database import init_session_maker, session_maker, SessionDep
 
 from exception import error as exc
 
-from provider import auth as auth_pd
-
-from .database import init_session_maker, session_maker, add_eager_load_to_stmt
+from .database import init_session_maker, add_eager_load_to_stmt
 
 init_session_maker()
 
 
-async def is_valid_user_id(ss: SessionDep, user_id: int):
-    pass
-
-
 async def get_current_token(req: Request):
     """
-    Get current user based on user token in request cookies
+    Get current user based on user token in request cookies or raise error
 
     This function could be used as a FastAPI dependency
     """
@@ -68,6 +62,33 @@ async def get_current_user(
 CurrentUserDep = Annotated[orm.User, Depends(get_current_user)]
 """
 Dependency annotaion for `get_current_user` function
+"""
+
+
+async def get_current_user_or_none(
+    ss: SessionDep,
+    req: Request,
+) -> orm.User | None:
+    """
+    FastAPI dependency to get current user.
+
+    Similar to `get_current_user()` function. With the only difference that
+    when this function could not retrieve valid user info, it will NOT raise error
+    but return `None`
+    """
+    try:
+        token = await get_current_token(req)
+        return await get_current_user(ss, token)
+    except:
+        return None
+
+
+CurrentUserOrNoneDep = Annotated[orm.User | None, Depends(get_current_user_or_none)]
+"""
+Similar to `CurrentUserDep`
+
+Check out docs of `get_current_user()` and `get_current_user_or_none()` for more info 
+and about the difference of these two deps.
 """
 
 
@@ -292,3 +313,13 @@ async def get_user_contact_info_list(ss: SessionDep, user: orm.User):
     contact_list = contact_list.all()
 
     return contact_list
+
+
+async def _get_contact_info_dep(ss: SessionDep, user: CurrentUserDep):
+    return get_user_contact_info_list(ss, user)
+
+
+CurrentContactInfoDep: Annotated[List[orm.ContactInfo], Depends(_get_contact_info_dep)]
+"""
+Dependency annoations for contact info of current user.
+"""

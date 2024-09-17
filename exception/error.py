@@ -62,6 +62,18 @@ class BaseErrorOut(BaseModel):
         return cls(name=e.name, message=e.message, status=e.status)
 
 
+class BaseErrorOutForOpenApi(BaseModel):
+    detail: BaseErrorOut
+
+
+def openApiErrorMark(status_description_dict: dict[int, str]):
+    res_dict = {}
+    for code, desc in status_description_dict.items():
+        res_dict[code] = {"model": BaseErrorOutForOpenApi, "description": desc}
+
+    return res_dict
+
+
 class NoResultError(BaseError):
     """
     Raise when could not find any result satisfying condition from database.
@@ -105,7 +117,9 @@ class AuthError(BaseError):
             err_msg = f"Invalid account info or username"
         if invalid_password:
             err_msg = f"Incorrect password"
-        super().__init__(name="auth_error", message=err_msg, status=401)
+        super().__init__(
+            name="auth_error", message=err_msg, status=httpstatus.HTTP_401_UNAUTHORIZED
+        )
 
 
 class TokenError(BaseError):

@@ -159,8 +159,9 @@ class Item(SQLBaseModel):
 
     name: Mapped[NormalString]
     description: Mapped[ParagraphString] = mapped_column(nullable=True)
+    created_time: Mapped[TimeStamp] = mapped_column(default=int(time.time()))
     price: Mapped[int] = mapped_column()
-    state: Mapped[ItemState]
+    state: Mapped[ItemState] = mapped_column(default=ItemState.valid)
 
     record: Mapped[List["TradeRecord"]] = relationship(back_populates="item")
     questions: Mapped[List["Question"]] = relationship(back_populates="item")
@@ -201,7 +202,8 @@ class Question(SQLBaseModel):
     item_id: Mapped[int] = mapped_column(ForeignKey("item.item_id"))
 
     question: Mapped[VeryLongString]
-    created_time: Mapped[TimeStamp]
+    created_time: Mapped[TimeStamp] = mapped_column(default=int(time.time()))
+    answered_time: Mapped[TimeStamp] = mapped_column(nullable=True)
     answer: Mapped[VeryLongString] = mapped_column(nullable=True)
     public: Mapped[bool] = mapped_column(default=False)
 

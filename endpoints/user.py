@@ -1,23 +1,15 @@
 import time
-import jwt
-from enum import Enum
 from typing import Annotated, cast, List
-from pydantic import BaseModel
 
 from loguru import logger
-from passlib.context import CryptContext
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi import APIRouter, Query, Depends, Request, Response, status, Body
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import HTTPException
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
 from schemes import db as db_sche
+from schemes import general as gene_sche
 from schemes import sql as orm
+
 from provider import user as user_provider
-from provider import auth as auth_provider
 from provider import database as db_provider
 from provider.database import SessionDep
 from exception import error as exc
@@ -90,8 +82,17 @@ async def add_user_contact_info(
 async def get_user_contact_info(
     ss: SessionDep,
     current_user: user_provider.CurrentUserDep,
-    user_id: int,
+    user_id: int | None = None,
 ):
+    """
+    Get contact info of a user based on user id.
+
+    Default to current user If `user_id` not specified.
+    """
+    # validate user_id
+    if user_id is None:
+        user_id = current_user.user_id
+
     # check permission (raise if failed)
     await user_provider.check_get_contact_info_permission(
         ss,
@@ -107,21 +108,66 @@ async def get_user_contact_info(
     return contact_info_list
 
 
-@user_router.post("/contact_info/remove")
+@user_router.delete("/contact_info/remove", response_model=db_sche.ContactInfoIn)
 async def remove_user_contact_info(
     ss: SessionDep, user: user_provider.CurrentUserDep, info: db_sche.ContactInfoIn
 ):
+    """
+    Remove a contact info from current user
+
+    Args
+
+    - `info` The info to be removed
+
+    Raises
+
+    - `no_result`
+    """
     contact_info_list = await user_provider.get_user_contact_info_list(ss, user)
 
+    found_flag = False
     for info_orm in contact_info_list:
         if (
             info_orm.contact_type == info.contact_type
             and info_orm.contact_info == info.contact_info
+            and info_orm.deleted == False
         ):
+            found_flag = True
             info_orm.deleted = True
+
+    if found_flag == False:
+        raise exc.NoResultError("Contact info not exists for current user")
 
     try:
         await ss.commit()
+        return info
+    except:
+        await ss.rollback()
+        raise
+
+
+@user_router.delete(
+    "/contact_info/remove_all", response_model=gene_sche.BlukOpeartionInfo
+)
+async def remove_all_user_contact_info(
+    ss: SessionDep, user: user_provider.CurrentUserDep
+):
+    """
+    Remove all contact info of current user
+    """
+    remove_count: int = 0
+    await user.awaitable_attrs.contact_info
+
+    for contact in user.contact_info:
+        if not contact.deleted:
+            contact.deleted = True
+            remove_count += 1
+
+    try:
+        await ss.commit()
+        return gene_sche.BlukOpeartionInfo(
+            operation="Remove all contact info", total=remove_count
+        )
     except:
         await ss.rollback()
         raise

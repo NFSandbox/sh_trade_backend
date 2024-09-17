@@ -109,7 +109,12 @@ async def login_for_token(
     )
 
 
-@auth_router.post("/token")
+@auth_router.post(
+    "/token",
+    responses=exc.openApiErrorMark(
+        {401: "Error occurred when retrieving or verifying token"}
+    ),
+)
 async def login_for_token_from_json(
     username: Annotated[str, Body()],
     password: Annotated[str, Body()],
