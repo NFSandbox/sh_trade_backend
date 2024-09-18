@@ -117,7 +117,7 @@ async def login_for_token(
         {401: "Error occurred when retrieving or verifying token"}
     ),
 )
-async def login_for_token_from_json(
+async def user_sign_in(
     username: Annotated[str, Body()],
     password: Annotated[str, Body()],
     resp: Response,
@@ -149,7 +149,7 @@ async def get_current_user_use_header(
 
 
 @auth_router.get("/logout")
-async def logout_account():
+async def user_sign_out():
     resp = JSONResponse(status_code=200, content={"is_logged_out": True})
     resp.delete_cookie(key=auth_conf.JWT_FRONTEND_COOKIE_KEY)
     return resp
@@ -176,7 +176,7 @@ async def get_current_user_info(
 
 
 @auth_router.post("/register", response_model=db_sche.UserOut)
-async def register_new_user(
+async def user_sign_up(
     ss: db_provider.SessionDep,
     info: Annotated[db_sche.UserIn, Body(embed=False)],
     resp: Response,
@@ -192,7 +192,7 @@ async def register_new_user(
         # this part also take charge of raising error if username duplicated
         # since if duplicated, there will be two users shared the same `new_user.username`
         try:
-            await login_for_token_from_json(
+            await user_sign_in(
                 new_user.username,
                 info.password,
                 session=ss,

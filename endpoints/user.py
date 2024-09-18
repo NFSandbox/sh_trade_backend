@@ -21,7 +21,7 @@ user_router = APIRouter()
 @user_router.post(
     "/description", response_model=db_sche.UserOut, response_model_exclude_none=True
 )
-async def update_user_description(
+async def update_description(
     session: db_provider.SessionDep,
     description: Annotated[str, Body(max_length=100)],
     user: Annotated[orm.User, Depends(user_provider.get_current_user)],
@@ -71,7 +71,7 @@ async def update_user_description(
     response_model=db_sche.ContactInfoIn,
     responses=exc.openApiErrorMark({409: "Contact Already Used"}),
 )
-async def add_user_contact_info(
+async def add_contact_info(
     ss: SessionDep,
     current_user: user_provider.CurrentUserDep,
     info: db_sche.ContactInfoIn,
@@ -83,7 +83,7 @@ async def add_user_contact_info(
 
 
 @user_router.get("/contact_info", response_model=List[db_sche.ContactInfoIn])
-async def get_user_contact_info(
+async def get_contact_info(
     ss: SessionDep,
     current_user: user_provider.CurrentUserDep,
     user_id: int | None = None,
@@ -117,7 +117,7 @@ async def get_user_contact_info(
     response_model=db_sche.ContactInfoIn,
     responses=exc.openApiErrorMark({404: "Contact info not exists"}),
 )
-async def remove_user_contact_info(
+async def remove_contact_info(
     ss: SessionDep, user: user_provider.CurrentUserDep, info: db_sche.ContactInfoIn
 ):
     """
@@ -157,9 +157,7 @@ async def remove_user_contact_info(
 @user_router.delete(
     "/contact_info/remove_all", response_model=gene_sche.BlukOpeartionInfo
 )
-async def remove_all_user_contact_info(
-    ss: SessionDep, user: user_provider.CurrentUserDep
-):
+async def remove_all_contact_info(ss: SessionDep, user: user_provider.CurrentUserDep):
     """
     Remove all contact info of current user
     """

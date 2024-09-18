@@ -23,7 +23,7 @@ item_router = APIRouter()
 
 
 @item_router.get("", response_model=List[db_sche.ItemOut])
-async def get_user_items(
+async def get_items_of_user(
     ss: SessionDep,
     user: CurrentUserOrNoneDep,
     user_id: int | None = None,
