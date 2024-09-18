@@ -53,8 +53,8 @@ async def get_user_by_contact_info(
         .options(
             selectinload(orm.ContactInfo.user).options(selectinload(orm.User.roles))
         )
-        .where(orm.ContactInfo.contact_info.__eq__(login_info))
-        .where(orm.ContactInfo.deleted.__eq__(False))
+        .where(orm.ContactInfo.contact_info == login_info)
+        .where(orm.ContactInfo.deleted_at == None)
     )
 
     # first try to find username
@@ -71,7 +71,7 @@ async def get_user_by_contact_info(
         user = contact.user
 
     # user invalid
-    if user.deleted:
+    if user.deleted_at is not None:
         raise exc.AuthError(invalid_contact=True)
 
     # success

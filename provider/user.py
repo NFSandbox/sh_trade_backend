@@ -112,7 +112,7 @@ async def get_user_from_user_id(
     stmt = (
         select(orm.User)
         .where(orm.User.user_id.__eq__(user_id))
-        .where(orm.User.deleted.__eq__(False))
+        .where(orm.User.deleted_at.__eq__(None))
     )
     if eager_load is not None:
         add_eager_load_to_stmt(stmt, eager_load)
@@ -148,7 +148,7 @@ async def check_duplicate_contacts(ss: SessionDep, info: db_sche.ContactInfoIn) 
         .distinct()
         .where(orm.ContactInfo.contact_info == info.contact_info)
         .where(orm.ContactInfo.contact_type == info.contact_type)
-        .where(orm.ContactInfo.deleted == False)
+        .where(orm.ContactInfo.deleted_at == None)
     )
     res = await ss.scalars(check_dup_stmt)
     res = res.one()
@@ -205,10 +205,10 @@ async def get_all_active_buyers(ss: SessionDep, user_id: int):
         .select_from(user1)
         .join(
             user1.items.of_type(item1)
-            .and_(user1.deleted == False)
+            .and_(user1.deleted_at == None)
             .and_(user1.user_id == user_id)
         )
-        .where(item1.deleted == False)
+        .where(item1.deleted_at == None)
         .where(item1.state == orm.ItemState.valid)
         .subquery()
     )
@@ -219,7 +219,7 @@ async def get_all_active_buyers(ss: SessionDep, user_id: int):
     _subq_valid_trades = (
         select(orm.TradeRecord).join_from(
             valid_item,
-            valid_item.record.and_(orm.TradeRecord.deleted == False).and_(
+            valid_item.record.and_(orm.TradeRecord.deleted_at == None).and_(
                 orm.TradeRecord.state == orm.TradeState.processing
             ),
         )
@@ -305,15 +305,15 @@ async def get_user_contact_info_list(ss: SessionDep, user: orm.User):
 
     Notice that is function do not contain any permission check
     """
-    contact_list = await ss.scalars(
+    stmt = (
         select(orm.ContactInfo)
         .select_from(orm.User)
         .join(
-            orm.User.contact_info.and_(orm.User.user_id == user.user_id).and_(
-                orm.ContactInfo.deleted == False
-            )
+            orm.User.contact_info.and_(orm.User.user_id == user.user_id)
         )
     )
+
+    contact_list = await ss.scalars(stmt)
     contact_list = contact_list.all()
 
     return contact_list

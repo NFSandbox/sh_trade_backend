@@ -28,7 +28,7 @@ async def get_item_by_id(ss: SessionDep, item_id: int):
     # get item
     try:
         item = await ss.get(orm.Item, item_id)
-        if item is None or item.deleted:
+        if item is None or item.deleted_at is not None:
             raise
         return item
     except:
@@ -54,7 +54,7 @@ async def get_user_items(
         .select_from(orm.User)
         .join(
             orm.User.items.and_(orm.User.user_id == user_id).and_(
-                orm.Item.deleted == False
+                orm.Item.deleted_at == None
             )
         )
     )
@@ -92,7 +92,7 @@ async def get_user_item_count(ss: SessionDep, user_id: int) -> int:
         select(func.count())
         .select_from(orm.User)
         .join(
-            orm.User.items.and_(orm.Item.deleted == False).and_(
+            orm.User.items.and_(orm.Item.deleted_at == None).and_(
                 orm.Item.state != orm.ItemState.sold
             )
         )
@@ -204,7 +204,7 @@ async def get_questions_by_item_id(
     # lazy load questions
     stmt = select(orm.Question).join_from(
         orm.Item,
-        orm.Item.questions.and_(orm.Question.deleted == False).and_(
+        orm.Item.questions.and_(orm.Question.deleted_at == None).and_(
             orm.Item.item_id == item_id
         ),
     )
@@ -247,7 +247,7 @@ async def get_question_by_id(ss: SessionDep, question_id: int):
     - `no_result` (404) No question found with specified ID
     """
     question = await ss.get(orm.Question, question_id)
-    if question is None or question.deleted:
+    if question is None or question.deleted_at is not None:
         raise exc.NoResultError(f"No question found with id: {question_id}")
 
     return question
@@ -276,7 +276,7 @@ async def check_question_belongs_to_user(
 
     # get item
     item: orm.Item = await question.awaitable_attrs.item
-    if item.deleted:
+    if item.deleted_at is not None:
         raise exc.NoResultError(
             "The item that this question points to no longer exists"
         )
@@ -284,7 +284,7 @@ async def check_question_belongs_to_user(
     # get user
     await item.awaitable_attrs.seller
     user = item.seller
-    if user.deleted:
+    if user.deleted_at is not None:
         raise exc.NoResultError(
             "The user that this question points to no longer exists"
         )
@@ -320,9 +320,9 @@ async def remove_questions(
     q_count = gene_sche.BlukOpeartionInfo(operation="Delete questions")
 
     for q in questions:
-        if q.deleted == False:
+        if q.deleted_at is None:
             q_count.inc()
-            q.deleted = True
+            q.delete()
 
     if commit:
         try:
@@ -348,7 +348,7 @@ async def get_cascade_items_from_users(
         .where(orm.User.user_id.in_([u.user_id for u in users]))
     )
     if exclude_deleted:
-        stmt = stmt.where(orm.Item.deleted == False)
+        stmt = stmt.where(orm.Item.deleted_at == None)
 
     res = await ss.scalars(stmt)
     items = res.all()
@@ -366,7 +366,7 @@ async def get_cascade_questions_from_items(
     )
 
     if exclude_deleted:
-        stmt = stmt.where(orm.Question.deleted == False)
+        stmt = stmt.where(orm.Question.deleted_at == None)
 
     res = await ss.scalars(stmt)
     return res.all()
@@ -409,9 +409,9 @@ async def remove_items_cascade(
 
         # delete items itself
         for i in items:
-            if not i.deleted:
+            if i.deleted_at == None:
                 i_count.inc()
-            i.deleted = True
+            i.delete()
 
         await ss.commit()
 
@@ -426,8 +426,8 @@ async def clean_up_question_with_deleted_items(ss: SessionDep):
     """A cleaning function used to remove items that points to soft-deleted items"""
 
     stmt_question_with_deleted_items = select(orm.Question).join(
-        orm.Question.item.and_(orm.Item.deleted == True).and_(
-            orm.Question.deleted == False
+        orm.Question.item.and_(orm.Item.deleted_at != None).and_(
+            orm.Question.deleted_at == None,
         )
     )
 
@@ -436,8 +436,8 @@ async def clean_up_question_with_deleted_items(ss: SessionDep):
 
     count = 0
     for q in questions:
-        if q.deleted == False:
-            q.deleted = True
+        if q.deleted_at == None:
+            q.delete()
             count += 1
 
     try:

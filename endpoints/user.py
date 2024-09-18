@@ -4,6 +4,7 @@ from typing import Annotated, cast, List
 from loguru import logger
 from fastapi import APIRouter, Query, Depends, Request, Response, status, Body
 
+from sqlalchemy import select
 
 from schemes import db as db_sche
 from schemes import general as gene_sche
@@ -52,7 +53,7 @@ async def update_description(
     if user_id is not None:
         try:
             user = await user_provider.get_user_from_user_id(session, user_id)
-            if user.deleted:
+            if user.deleted_at is not None:
                 raise
         except:
             raise exc.ParamError(
@@ -131,6 +132,8 @@ async def remove_contact_info(
 
     - `no_result`
     """
+    logger.debug(select(orm.User).join(orm.User.items))
+    
     contact_info_list = await user_provider.get_user_contact_info_list(ss, user)
 
     found_flag = False
@@ -138,10 +141,9 @@ async def remove_contact_info(
         if (
             info_orm.contact_type == info.contact_type
             and info_orm.contact_info == info.contact_info
-            and info_orm.deleted == False
         ):
             found_flag = True
-            info_orm.deleted = True
+            info_orm.delete()
 
     if found_flag == False:
         raise exc.NoResultError("Contact info not exists for current user")
@@ -165,8 +167,8 @@ async def remove_all_contact_info(ss: SessionDep, user: user_provider.CurrentUse
     await user.awaitable_attrs.contact_info
 
     for contact in user.contact_info:
-        if not contact.deleted:
-            contact.deleted = True
+        if contact.deleted_at is None:
+            contact.delete()
             remove_count += 1
 
     try:

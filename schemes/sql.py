@@ -1,6 +1,6 @@
 from datetime import datetime, UTC
 from enum import Enum
-from typing import Annotated, List
+from typing import Annotated, List, cast
 from loguru import logger
 
 from pydantic import BaseModel
@@ -13,12 +13,10 @@ from sqlalchemy.orm import (
     relationship,
     MappedAsDataclass,
 )
+from sqlalchemy.sql.type_api import TypeEngine
 
-
-class SQLBaseModel(AsyncAttrs, DeclarativeBase):
-    deleted: Mapped[bool] = mapped_column(default=False)
-
-    type_annotation_map = {int: BIGINT}
+from sqlalchemy_easy_softdelete.mixin import generate_soft_delete_mixin_class
+from sqlalchemy_easy_softdelete.hook import IgnoredTable
 
 
 # using datetime to get utc timestamp
@@ -26,6 +24,34 @@ class SQLBaseModel(AsyncAttrs, DeclarativeBase):
 # https://blog.miguelgrinberg.com/post/it-s-time-for-a-change-datetime-utcnow-is-now-deprecated
 def get_current_timestamp_ms() -> int:
     return int(datetime.now(UTC).timestamp() * 1000)
+
+
+# Create a Class that inherits from our class builder
+class SoftDeleteMixin(
+    generate_soft_delete_mixin_class(
+        # This table will be ignored by the hook
+        # even if the table has the soft-delete column
+        ignored_tables=[
+            IgnoredTable(table_schema="public", name="cars"),
+        ],
+        delete_method_default_value=get_current_timestamp_ms,
+        deleted_field_type=cast("TypeEngine", BIGINT),
+    )
+):
+    # type hint for autocomplete IDE support
+    deleted_at: Mapped[int | None]
+
+    def delete(self):
+        super().delete()
+
+    def undelete(self):
+        super().undelete()
+
+
+class SQLBaseModel(DeclarativeBase, AsyncAttrs, SoftDeleteMixin):
+    deleted: Mapped[bool] = mapped_column(default=False)
+
+    type_annotation_map = {int: BIGINT}
 
 
 # custom column type
