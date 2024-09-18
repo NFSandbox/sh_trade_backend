@@ -31,7 +31,20 @@ class ContactInfoOut(ContactInfoIn):
     contact_info_id: int
 
 
+class TagOut(BaseModel):
+    tag_id: int
+    tag_type: str
+    name: str
+
+
 class ItemOut(BaseModel):
+    """
+    Notes
+
+    - When directly validate from ORM class `Item`, the orm relation attribute `tags`
+      should be loaded in advance, using `selectinload` or `awaitable_attrs`
+    """
+
     item_id: int
     name: str
     description: str | None
@@ -39,11 +52,15 @@ class ItemOut(BaseModel):
     price: int
     state: orm.ItemState
 
+    # this field need to be loaded manually in advance when validating from ORM class instance
+    tags: list[TagOut] | None = None
+
 
 class ItemIn(BaseModel):
     name: str = Field(max_length=20)
     description: str = Field(max_length=2000)
     price: PositiveInt
+    tags: list[Annotated[str, Field(max_length=20)]] | None = None
 
 
 class ItemInWithId(ItemIn):

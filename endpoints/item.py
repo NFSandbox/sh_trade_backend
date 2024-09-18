@@ -74,7 +74,11 @@ async def get_items_of_user(
     ),
     response_model=db_sche.ItemOut,
 )
-async def add_item(ss: SessionDep, item: db_sche.ItemIn, user: CurrentUserDep):
+async def add_item(
+    ss: SessionDep,
+    user: CurrentUserDep,
+    item: db_sche.ItemIn,
+):
 
     # get current user items count
     count = await item_provider.get_user_item_count(ss, user_id=user.user_id)
@@ -86,6 +90,9 @@ async def add_item(ss: SessionDep, item: db_sche.ItemIn, user: CurrentUserDep):
         )
 
     new_item = await item_provider.add_item(ss, user, item)
+
+    # load tags in advance
+    await new_item.awaitable_attrs.tags
     return new_item
 
 
@@ -99,7 +106,9 @@ async def update_item(ss: SessionDep, user: CurrentUserDep, info: db_sche.ItemIn
     await item_provider.check_item_belong_to_user(ss, info.item_id, user.user_id)
 
     # update item
-    return await item_provider.update_item(ss, info)
+    item_orm = await item_provider.update_item(ss, info)
+    await item_orm.awaitable_attrs.tags
+    return item_orm
 
 
 @item_router.delete("/remove_all", response_model=List[gene_sche.BlukOpeartionInfo])

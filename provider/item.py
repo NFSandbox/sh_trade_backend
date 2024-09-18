@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload, QueryableAttribute, aliased
 from sqlalchemy.sql import and_
 from sqlalchemy import exc as sqlexc
 
-from fastapi import Depends, Request
+from fastapi import Depends, Request, Body
 
 from config import auth as auth_conf
 
@@ -41,6 +41,7 @@ async def get_user_items(
     time_desc: bool = True,
     ignore_hide: bool = True,
     ignore_sold: bool = False,
+    load_tags: bool = True,
 ):
     """
     Get selling items of a user by user id
@@ -58,6 +59,9 @@ async def get_user_items(
             )
         )
     )
+
+    # load tags
+    stmt = stmt.options(selectinload(orm.Item.tags))
 
     # determine order
     if time_desc:
@@ -105,17 +109,96 @@ async def get_user_item_count(ss: SessionDep, user_id: int) -> int:
     return res
 
 
-async def add_item(ss: SessionDep, user: CurrentUserDep, item: db_sche.ItemIn):
+async def remove_tags_of_item(ss: SessionDep, item: orm.Item):
+    await item.awaitable_attrs.tags
+    # create shallow copy of previous tags list
+    all_prev_tags = list(item.tags)
+    
+    for t in all_prev_tags:
+        item.tags.remove(t)
+
+    try:
+        await ss.commit()
+        await ss.refresh(item)
+        await item.awaitable_attrs.tags
+    except:
+        await ss.rollback()
+        raise
+
+    return item
+
+
+async def update_tags_of_item(
+    ss: SessionDep,
+    item: orm.Item,
+    tag_str_list: list[str],
+    commit: bool = True,
+    remove_prev: bool = True,
+) -> orm.Item:
     """
-    Add an item for a user
+    Update tags of an item, and return the updated item
+
+    Args
+
+    - `remove_prev` Remove all previous tags of item. `item` must be already in database
+
+    Note
+
+    - All previous tags will be removed
+    """
+    # remove tags duplication,
+    tag_str_list = list(set(tag_str_list))
+
+    # get tag orm instance list to be added
+    tag_orm_list = await add_tags_if_not_exists(ss, tag_str_list)
+
+    if remove_prev:
+        await remove_tags_of_item(ss, item)
+
+    # add tags
+    await item.awaitable_attrs.tags
+    for t in tag_orm_list:
+        item.tags.append(t)
+
+    # commit if needed
+    if commit:
+        try:
+            await ss.commit()
+            await ss.refresh(item)
+        except:
+            await ss.rollback()
+            raise
+
+    return item
+
+
+async def add_item(
+    ss: SessionDep,
+    user: CurrentUserDep,
+    item: db_sche.ItemIn,
+):
+    """
+    Add an item for a user, if tags specified, also add tags to item
     """
     # create new item orm
     try:
-        item_orm = orm.Item(**item.model_dump())
+        item_orm = orm.Item(**item.model_dump(exclude={"tags"}))
+
+        # add tags to item
+        tag_list = item.tags
+        if tag_list is not None:
+            item_orm = await update_tags_of_item(
+                ss, item_orm, tag_list, commit=False, remove_prev=False
+            )
+
+        # add item to user
         await user.awaitable_attrs.items
         user.items.append(item_orm)
         await ss.commit()
         await ss.refresh(item_orm)
+
+        # load tags of the item (because of refresh)
+        await item_orm.awaitable_attrs.tags
         return item_orm
     except:
         await ss.rollback()
@@ -129,6 +212,10 @@ async def update_item(ss: SessionDep, info: db_sche.ItemInWithId):
     item.name = info.name
     item.description = info.description
     item.price = info.price
+
+    tag_str_list = info.tags
+    if tag_str_list is not None:
+        await update_tags_of_item(ss, item, tag_str_list)
 
     try:
         await ss.commit()
@@ -447,3 +534,61 @@ async def clean_up_question_with_deleted_items(ss: SessionDep):
     except:
         await ss.rollback()
         raise
+
+
+async def get_tags_by_names(
+    ss: SessionDep, tag_str_list: Sequence[str]
+) -> Sequence[orm.Tag]:
+    """
+    Get a list of orm Tag instance by list of tag name str
+
+    Raises
+
+    - `no_result` Corresponding tag not exists
+    """
+    # store the retrieve orm tag instance
+    orm_tag_list: list[orm.Tag] = []
+
+    # iterate to get tag with corresponding name
+    for tag_name in tag_str_list:
+        # retrieve tags
+        stmt = select(orm.Tag).where(orm.Tag.name == tag_name)
+        tag_orm = await ss.scalar(stmt)
+        # add to result list
+        orm_tag_list.append(tag_orm)
+
+    return orm_tag_list
+
+
+async def add_tags_if_not_exists(ss: SessionDep, tag_str_list: Sequence[str]):
+    """
+    Create new tags based on a list of tag name str if the tag with the name
+    not exists
+
+    Returns
+
+    A list of orm Tag instance corresponding to the tag string list
+    """
+    # get list of exists tags
+    stmt = select(orm.Tag)
+    res = await ss.scalars(stmt)
+    exists_tags = res.all()
+    exists_tags_str = [t.name for t in exists_tags]
+
+    # add if not exists
+    for tag in tag_str_list:
+        if tag in exists_tags_str:
+            continue
+        logger.debug(f"Adding tag with name: {tag}")
+        new_tag = orm.Tag(name=tag)
+        ss.add(new_tag)
+
+    # persist change
+    try:
+        await ss.commit()
+    except:
+        await ss.rollback()
+        raise
+
+    # return orm tag list
+    return await get_tags_by_names(ss, tag_str_list)
