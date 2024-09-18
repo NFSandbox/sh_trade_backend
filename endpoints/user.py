@@ -66,7 +66,11 @@ async def update_user_description(
     return db_sche.UserOut.model_validate(user)
 
 
-@user_router.post("/contact_info/add", response_model=db_sche.ContactInfoIn)
+@user_router.post(
+    "/contact_info/add",
+    response_model=db_sche.ContactInfoIn,
+    responses=exc.openApiErrorMark({409: "Contact Already Used"}),
+)
 async def add_user_contact_info(
     ss: SessionDep,
     current_user: user_provider.CurrentUserDep,
@@ -108,7 +112,11 @@ async def get_user_contact_info(
     return contact_info_list
 
 
-@user_router.delete("/contact_info/remove", response_model=db_sche.ContactInfoIn)
+@user_router.delete(
+    "/contact_info/remove",
+    response_model=db_sche.ContactInfoIn,
+    responses=exc.openApiErrorMark({404: "Contact info not exists"}),
+)
 async def remove_user_contact_info(
     ss: SessionDep, user: user_provider.CurrentUserDep, info: db_sche.ContactInfoIn
 ):

@@ -103,7 +103,9 @@ async def login_for_token(
     # return generated token based on user info
     return auth_sche.TokenOut(
         access_token=auth_sche.TokenData(
-            user_id=user.user_id, roles=roles, created_time=int(time.time())
+            user_id=user.user_id,
+            roles=roles,
+            created_time=orm.get_current_timestamp_ms(),
         ).to_jwt_str(),
         token_type="bearer",
     )

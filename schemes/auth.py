@@ -5,6 +5,8 @@ import jwt
 from config import auth as auth_conf
 from exception import error as exc
 
+from schemes.sql import get_current_timestamp_ms
+
 __all__ = [
     "TokenOut",
     "TokenData",
@@ -51,7 +53,8 @@ class TokenData(BaseModel):
     def is_expired(self):
         """If this token is expired in current time"""
         return (
-            self.created_time + auth_conf.TOKEN_EXPIRES_DELTA_HOURS * 3600 < time.time()
+            self.created_time + auth_conf.TOKEN_EXPIRES_DELTA_HOURS * 3600 * 1000
+            < get_current_timestamp_ms()
         )
 
 

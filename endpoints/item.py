@@ -110,9 +110,37 @@ async def remove_all_items(ss: SessionDep, user: CurrentUserDep):
         raise
 
 
+@item_router.delete(
+    "/remove",
+    response_model=List[gene_sche.BlukOpeartionInfo],
+    responses=exc.openApiErrorMark({403: "Permission Required"}),
+)
+async def remove_items(ss: SessionDep, user: CurrentUserDep, item_id_list: list[int]):
+    items = [await item_provider.get_item_by_id(ss, iid) for iid in item_id_list]
+
+    # permission check, user could only delete items of themselves
+    for item in items:
+        # admin, skip permission check
+        if await user.verify_role(["admin"]):
+            break
+        if item.user_id != user.user_id:
+            raise exc.PermissionError(
+                message="You could only delete items owned by yourself"
+            )
+
+    # cascade delete item
+    return await item_provider.remove_items_cascade(ss, items)
+
+
 @item_router.post(
     "/question/add",
-    responses=exc.openApiErrorMark({404: "ItemNotFound", 403: "NoAnswerPermission"}),
+    responses=exc.openApiErrorMark(
+        {
+            404: "ItemNotFound",
+            403: "NoAnswerPermission",
+            401: "Auth Required",
+        }
+    ),
     response_model=db_sche.QuestionOut,
     response_model_exclude_none=True,
 )
@@ -135,6 +163,9 @@ async def add_question(
                 message="Current user do not have permission to answer this question"
             )
 
+    # update question asker by current user info
+    question.asker_id = user.user_id
+
     # get item
     item = await item_provider.get_item_by_id(ss, question.item_id)
 
@@ -155,10 +186,66 @@ async def add_question(
         raise
 
 
-async def answer_question(ss: SessionDep, question_id: int, answer: str):
-    # todo
-    pass
+@item_router.get("/questions", response_model=List[db_sche.QuestionOut])
+async def get_questions_of_item(
+    ss: SessionDep,
+    user: CurrentUserOrNoneDep,
+    item_id: int,
+    time_desc: bool = True,
+    unanswered_only: bool = False,
+):
+    """
+    Get all questions related to an tiem
+
+    Args
+
+    - `time_desc` Order result by created time desc
+    - `unanswered_only` Only return unanswered question
+
+    No account needed for this endpoint
+    """
+    user_id = None
+    if user is not None:
+        user_id = user.user_id
+
+    return await item_provider.get_questions_by_item_id(
+        ss, item_id, user_id, time_desc, unanswered_only
+    )
 
 
-async def delete_question(ss: SessionDep, question_id: int):
-    pass
+@item_router.post(
+    "/question/answer",
+    response_model=db_sche.QuestionOut,
+    responses=exc.openApiErrorMark(
+        {404: "No Related User", 403: "No Permission To Answer"}
+    ),
+)
+async def answer_question(
+    ss: SessionDep,
+    user: CurrentUserDep,
+    question_id: Annotated[int, Body()],
+    answer: Annotated[str, Body()],
+):
+    # check if the user the owner of the question related item
+    await item_provider.check_question_belongs_to_user(ss, question_id, user.user_id)
+
+    return await item_provider.answer_question(ss, question_id, answer)
+
+
+@item_router.delete(
+    "/question/remove",
+    response_model=gene_sche.BlukOpeartionInfo,
+    responses=exc.openApiErrorMark(
+        {404: "No Related User", 403: "No Permission To Answer"}
+    ),
+)
+async def delete_question(ss: SessionDep, user: CurrentUserDep, question_id: int):
+    # only related user could delete the question
+    if not await user.verify_role(["admin"]):
+        await item_provider.check_question_belongs_to_user(
+            ss, question_id, user.user_id
+        )
+
+    return await item_provider.remove_questions(
+        ss, [await item_provider.get_question_by_id(ss, question_id)]
+    )

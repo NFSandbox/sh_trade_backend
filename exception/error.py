@@ -69,7 +69,12 @@ class BaseErrorOutForOpenApi(BaseModel):
 def openApiErrorMark(status_description_dict: dict[int, str]):
     res_dict = {}
     for code, desc in status_description_dict.items():
-        res_dict[code] = {"model": BaseErrorOutForOpenApi, "description": desc}
+        res_dict[code] = {
+            "model": BaseErrorOutForOpenApi,
+            "name": desc,
+            "title": desc,
+            "description": desc,
+        }
 
     return res_dict
 
@@ -195,28 +200,28 @@ class ParamError(BaseError):
         )
 
 
-class AHUHeaderError(BaseError):
+class CascadeConstraintError(BaseError):
     """
-    Raise when backend found the AHU Header Auth info is invalid.
+    Raise when constraint condition trigger in soft delete operation
     """
 
-    def __init__(self):
+    def __init__(self, message: str) -> None:
         super().__init__(
-            name="ahu_header_error",
-            message="AHU Header provided are invalid, data could not be retrieved from AHU website.",
-            status=404,
+            "cascade_constraint",
+            message,
+            status=httpstatus.HTTP_400_BAD_REQUEST,
         )
 
 
-class AHUInfoParseError(BaseError):
+class DuplicatedError(BaseError):
     """
-    Raise when could not successfully parse this info from AHU website return.
+    Raise when duplicated info found while adding info
     """
 
-    def __init__(self, received_text_info: str):
-        super().__init__(
-            name="ahu_parse_error",
-            message=f"Failed to parse the return info from AHU website on the server side. "
-            f"Received text info is: {received_text_info}",
-            status=404,
-        )
+    def __init__(
+        self,
+        name: str = "already_exists",
+        message: str = "Data already exists",
+        status: int = httpstatus.HTTP_409_CONFLICT,
+    ) -> None:
+        super().__init__(name, message, status)

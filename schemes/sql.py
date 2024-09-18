@@ -1,4 +1,4 @@
-import time
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Annotated, List
 from loguru import logger
@@ -21,13 +21,20 @@ class SQLBaseModel(AsyncAttrs, DeclarativeBase):
     type_annotation_map = {int: BIGINT}
 
 
+# using datetime to get utc timestamp
+# for more info, check out:
+# https://blog.miguelgrinberg.com/post/it-s-time-for-a-change-datetime-utcnow-is-now-deprecated
+def get_current_timestamp_ms() -> int:
+    return int(datetime.now(UTC).timestamp() * 1000)
+
+
 # custom column type
 IntPrimaryKey = Annotated[int, mapped_column(primary_key=True)]
 NormalString = Annotated[str, mapped_column(String(20))]
 LongString = Annotated[str, mapped_column(String(100))]
 VeryLongString = Annotated[str, mapped_column(String(500))]
 ParagraphString = Annotated[str, mapped_column(String(2000))]
-TimeStamp = Annotated[int, mapped_column(default=int(time.time()))]
+TimeStamp = Annotated[int, mapped_column(default=get_current_timestamp_ms)]
 
 
 class PaginationConfig(BaseModel):
@@ -159,7 +166,7 @@ class Item(SQLBaseModel):
 
     name: Mapped[NormalString]
     description: Mapped[ParagraphString] = mapped_column(nullable=True)
-    created_time: Mapped[TimeStamp] = mapped_column(default=int(time.time()))
+    created_time: Mapped[TimeStamp] = mapped_column(default=get_current_timestamp_ms)
     price: Mapped[int] = mapped_column()
     state: Mapped[ItemState] = mapped_column(default=ItemState.valid)
 
@@ -200,14 +207,16 @@ class Question(SQLBaseModel):
     question_id: Mapped[IntPrimaryKey]
 
     item_id: Mapped[int] = mapped_column(ForeignKey("item.item_id"))
+    asker_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
 
     question: Mapped[VeryLongString]
-    created_time: Mapped[TimeStamp] = mapped_column(default=int(time.time()))
+    created_time: Mapped[TimeStamp] = mapped_column(default=get_current_timestamp_ms)
     answered_time: Mapped[TimeStamp] = mapped_column(nullable=True)
     answer: Mapped[VeryLongString] = mapped_column(nullable=True)
     public: Mapped[bool] = mapped_column(default=False)
 
     item: Mapped["Item"] = relationship(back_populates="questions")
+    asker: Mapped["User"] = relationship(User)
 
 
 class TagsType(Enum):

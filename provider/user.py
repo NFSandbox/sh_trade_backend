@@ -153,7 +153,7 @@ async def check_duplicate_contacts(ss: SessionDep, info: db_sche.ContactInfoIn) 
     res = await ss.scalars(check_dup_stmt)
     res = res.one()
     if res > 0:
-        raise exc.BaseError(
+        raise exc.DuplicatedError(
             name="contact_info_already_exists",
             message="Contact info already exists or used by others",
         )
@@ -162,6 +162,10 @@ async def check_duplicate_contacts(ss: SessionDep, info: db_sche.ContactInfoIn) 
 async def add_contact_info(ss: SessionDep, user: orm.User, info: db_sche.ContactInfoIn):
     """
     Add a new contact info to a user
+
+    Raises
+
+    - `contact_info_already_exists`
     """
     try:
         # ensure no duplication

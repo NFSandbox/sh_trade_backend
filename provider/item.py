@@ -1,7 +1,9 @@
+import time
+
 from typing import Annotated, cast, List, Sequence
 
 from loguru import logger
-from sqlalchemy import select, update, func, Column, distinct
+from sqlalchemy import select, update, func, Column, distinct, or_
 from sqlalchemy.orm import selectinload, QueryableAttribute, aliased
 from sqlalchemy.sql import and_
 from sqlalchemy import exc as sqlexc
@@ -151,6 +153,172 @@ async def item_belong_to_user(ss: SessionDep, item_id: int, user_id: int):
         )
 
 
+async def get_questions_by_item_id(
+    ss: SessionDep,
+    item_id: int,
+    user_id: int | None = None,
+    time_desc: bool = True,
+    unanswered_only: bool = False,
+):
+    """
+    Return all questions related to an item
+
+    Args
+
+    - `item_id` The item_id of the item that you want to get questions of
+    - `user_id` Which user are requesting this questions, used for access control
+    """
+    # promise valid user
+    if user_id is not None:
+        user = await get_user_from_user_id(ss, user_id)
+    # promise valid item
+    item = await get_item_by_id(ss, item_id)
+
+    # permission flags
+    item_owner = False
+
+    # check permission
+    if user_id is not None:
+        try:
+            # check if this user is the owner of the item
+            await item_belong_to_user(ss, item.item_id, user_id)
+            item_owner = True
+        except:
+            pass
+
+    # lazy load questions
+    stmt = select(orm.Question).join_from(
+        orm.Item,
+        orm.Item.questions.and_(orm.Question.deleted == False).and_(
+            orm.Item.item_id == item_id
+        ),
+    )
+
+    # if no user_id (access by guest)
+    # only see public question
+    if user_id is None:
+        stmt = stmt.where(orm.Question.public == True)
+
+    # if user are not owner, only see public or self-asked question
+    if (user_id is not None) and (not item_owner):
+        stmt = stmt.options(selectinload(orm.Question.asker)).where(
+            or_(orm.Question.public == True, orm.Question.asker == user)
+        )
+
+    # order
+    if time_desc:
+        stmt = stmt.order_by(orm.Question.created_time.desc())
+    else:
+        stmt = stmt.order_by(orm.Question.created_time.asc())
+
+    # unanswered
+    if unanswered_only:
+        stmt = stmt.where(orm.Question.answer == None)
+
+    # debug
+    logger.debug(f"SQL Stmt: \n{stmt}")
+
+    res = await ss.scalars(stmt)
+    questions = res.all()
+
+    return questions
+
+
+async def get_question_by_id(ss: SessionDep, question_id: int):
+    """Get question by question_id
+
+    Raises
+
+    - `no_result` (404) No question found with specified ID
+    """
+    question = await ss.get(orm.Question, question_id)
+    if question is None or question.deleted:
+        raise exc.NoResultError(f"No question found with id: {question_id}")
+
+    return question
+
+
+async def check_question_belongs_to_user(
+    ss: SessionDep, question_id: int, user_id: int
+):
+    """Check if a question belongs to a specific user
+
+    Return
+
+    - User that the question belongs to if found
+
+    Raises
+
+    - `no_result`
+      - No question found with specified ID
+      - The item that this question points to no longer exists
+      - The user that this question points to no longer exists
+    - `permission_required`
+      - The question is not belongs to specified user
+    """
+    # get question
+    question = await get_question_by_id(ss, question_id)
+
+    # get item
+    item: orm.Item = await question.awaitable_attrs.item
+    if item.deleted:
+        raise exc.NoResultError(
+            "The item that this question points to no longer exists"
+        )
+
+    # get user
+    await item.awaitable_attrs.seller
+    user = item.seller
+    if user.deleted:
+        raise exc.NoResultError(
+            "The user that this question points to no longer exists"
+        )
+
+    if user.user_id != user_id:
+        raise exc.PermissionError(
+            message="The question is not belongs to specified user"
+        )
+
+    return user
+
+
+async def answer_question(ss: SessionDep, question_id: int, answer: str):
+    """Add or update the answer of a question, return the updated ORM instance of question"""
+    question = await get_question_by_id(ss, question_id)
+    question.answer = answer
+    question.answered_time = orm.get_current_timestamp_ms()
+
+    try:
+        await ss.commit()
+        await ss.refresh(question)
+        return question
+    except:
+        await ss.rollback()
+        raise
+
+
+async def remove_questions(
+    ss: SessionDep,
+    questions: Sequence[orm.Question],
+    commit: bool = True,
+):
+    q_count = gene_sche.BlukOpeartionInfo(operation="Delete questions")
+
+    for q in questions:
+        if q.deleted == False:
+            q_count.inc()
+            q.deleted = True
+
+    if commit:
+        try:
+            await ss.commit()
+        except:
+            await ss.rollback()
+            raise
+
+    return q_count
+
+
 async def get_cascade_items_from_users(
     ss: SessionDep, users: Sequence[orm.User], exclude_deleted: bool = True
 ):
@@ -190,14 +358,25 @@ async def get_cascade_questions_from_items(
 
 
 async def remove_items_cascade(
-    ss: SessionDep, items: Sequence[orm.Item]
+    ss: SessionDep,
+    items: Sequence[orm.Item],
+    constraint: bool = False,
 ) -> List[gene_sche.BlukOpeartionInfo]:
     """
     Soft delete a list of items, with cascade delete of all relavant data
 
+    Args
+
+    - `items` The items need to be cascade delete
+    - `constraint` If `True`, raise error if has cascade items.
+
     Cascade
 
     - `Question` All question related to these items
+
+    Raises
+
+    - `cascade_constraint`
     """
     # record the effective delete count of all entities
     q_count = gene_sche.BlukOpeartionInfo(operation="Cascading delete questions")
@@ -205,10 +384,13 @@ async def remove_items_cascade(
     try:
         # delete question cascade of item
         questions = await get_cascade_questions_from_items(ss, items)
-        for q in questions:
-            if not q.deleted:
-                q_count.inc()
-            q.deleted = True
+        # raise error if constraint
+        if constraint and len(questions) > 0:
+            raise exc.CascadeConstraintError(
+                "Could not remove items with active questions"
+            )
+
+        q_count = await remove_questions(ss, questions, commit=False)
 
         # delete items itself
         for i in items:

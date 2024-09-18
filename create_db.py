@@ -21,14 +21,12 @@ DEFAULT_USERS = [
     orm.User(
         user_id=1,
         username="nfnfgo",
-        created_time=int(time.time()),
         # password=string
         password="$2b$12$j4gfDdlPetmpb7Z0xGA7C.Vox3P7X0.848622qQrWwR6QTvXGFrHG",
     ),
     orm.User(
         user_id=2,
         username="admin",
-        created_time=int(time.time()),
         # password=admin
         password="$2b$12$P22k4V8ZPhE5Gobgs3Xms.okkwMdxqg43ik6XAJsuTy12ZvlZTK9a",
     ),

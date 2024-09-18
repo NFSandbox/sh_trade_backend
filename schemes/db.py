@@ -48,6 +48,7 @@ class ItemIn(BaseModel):
 
 class QuestionIn(BaseModel):
     item_id: int
+    asker_id: int | None = None
     question: Annotated[str, Field(max_length=500)]
     public: bool = False
     answer: Annotated[str | None, Field(max_length=500)] = None
