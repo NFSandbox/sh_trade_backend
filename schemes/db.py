@@ -46,6 +46,10 @@ class ItemIn(BaseModel):
     price: PositiveInt
 
 
+class ItemInWithId(ItemIn):
+    item_id: int
+
+
 class QuestionIn(BaseModel):
     item_id: int
     asker_id: int | None = None

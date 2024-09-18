@@ -86,8 +86,20 @@ async def add_item(ss: SessionDep, item: db_sche.ItemIn, user: CurrentUserDep):
         )
 
     new_item = await item_provider.add_item(ss, user, item)
-
     return new_item
+
+
+@item_router.post(
+    "/update",
+    response_model=db_sche.ItemOut,
+    responses=exc.openApiErrorMark({403: "Item No Belong To User"}),
+)
+async def update_item(ss: SessionDep, user: CurrentUserDep, info: db_sche.ItemInWithId):
+    # permision check: only own of the item could update info
+    await item_provider.check_item_belong_to_user(ss, info.item_id, user.user_id)
+
+    # update item
+    return await item_provider.update_item(ss, info)
 
 
 @item_router.delete("/remove_all", response_model=List[gene_sche.BlukOpeartionInfo])
@@ -155,7 +167,7 @@ async def add_question(
     # if contains answer part, check permission
     if question.answer is not None:
         try:
-            item = await item_provider.item_belong_to_user(
+            item = await item_provider.check_item_belong_to_user(
                 ss, question.item_id, user.user_id
             )
         except exc.BaseError as e:

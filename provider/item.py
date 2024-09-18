@@ -122,7 +122,24 @@ async def add_item(ss: SessionDep, user: CurrentUserDep, item: db_sche.ItemIn):
         raise
 
 
-async def item_belong_to_user(ss: SessionDep, item_id: int, user_id: int):
+async def update_item(ss: SessionDep, info: db_sche.ItemInWithId):
+    """Update item info and return updated item info"""
+    item = await get_item_by_id(ss, info.item_id)
+
+    item.name = info.name
+    item.description = info.description
+    item.price = info.price
+
+    try:
+        await ss.commit()
+        await ss.refresh(item)
+        return item
+    except:
+        await ss.rollback()
+        raise
+
+
+async def check_item_belong_to_user(ss: SessionDep, item_id: int, user_id: int):
     """
     Check if an item belongs to a specific user
 
@@ -130,7 +147,7 @@ async def item_belong_to_user(ss: SessionDep, item_id: int, user_id: int):
 
     Raises
 
-    - `item_belonging_test_failed`
+    - `item_belonging_test_failed` 403
     """
     # promise this is valid user
     await get_user_from_user_id(ss, user_id)
@@ -146,10 +163,8 @@ async def item_belong_to_user(ss: SessionDep, item_id: int, user_id: int):
         res = res.one()
         return res
     except:
-        raise exc.BaseError(
-            "item_belonging_test_failed",
-            f"Item with id: {item_id} does not belongs to user with id: {user_id}",
-            status=500,
+        raise exc.PermissionError(
+            message=f"Item with id: {item_id} does not belongs to user with id: {user_id}",
         )
 
 
@@ -181,7 +196,7 @@ async def get_questions_by_item_id(
     if user_id is not None:
         try:
             # check if this user is the owner of the item
-            await item_belong_to_user(ss, item.item_id, user_id)
+            await check_item_belong_to_user(ss, item.item_id, user_id)
             item_owner = True
         except:
             pass
