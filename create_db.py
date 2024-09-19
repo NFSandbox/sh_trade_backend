@@ -51,6 +51,7 @@ async def add_default_data():
 
             logger.info("Adding user-role relationship...")
             test_user: orm.User = await ss.get(orm.User, 1)  # type: ignore
+            assert test_user is not None
             roles: list[orm.Role] = await test_user.awaitable_attrs.roles
             admin_role: orm.Role = await ss.get(orm.Role, 1)  # type: ignore
             roles.append(admin_role)

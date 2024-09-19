@@ -1,9 +1,11 @@
 from datetime import datetime, UTC
 from enum import Enum
-from typing import Annotated, List, cast
+from typing import Annotated, List, Set, cast
 from loguru import logger
 
 from pydantic import BaseModel
+
+# sqlalchemy basics
 from sqlalchemy import Select, BIGINT, String, ForeignKey, Column, Table
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import (
@@ -15,6 +17,11 @@ from sqlalchemy.orm import (
 )
 from sqlalchemy.sql.type_api import TypeEngine
 
+# sqlalchemy association proxy extensions
+from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy.ext.associationproxy import AssociationProxy
+
+# easy soft delete
 from sqlalchemy_easy_softdelete.mixin import generate_soft_delete_mixin_class
 from sqlalchemy_easy_softdelete.hook import IgnoredTable
 
@@ -49,8 +56,6 @@ class SoftDeleteMixin(
 
 
 class SQLBaseModel(DeclarativeBase, AsyncAttrs, SoftDeleteMixin):
-    deleted: Mapped[bool] = mapped_column(default=False)
-
     type_annotation_map = {int: BIGINT}
 
 
@@ -144,8 +149,6 @@ class User(SQLBaseModel):
         # iterate through user's roles.
         # once one of the user role is in the allowed role list, pass the test
         for user_role in roles_of_this_user:
-            if user_role.deleted:
-                continue
             if user_role.role_name in roles:
                 return True
 
@@ -175,14 +178,6 @@ class ItemState(Enum):
     valid = "valid"
 
 
-association_items_tags = Table(
-    "association_items_tags",
-    SQLBaseModel.metadata,
-    Column("item_id", ForeignKey("item.item_id"), primary_key=True),
-    Column("tag_id", ForeignKey("tag.tag_id"), primary_key=True),
-)
-
-
 class Item(SQLBaseModel):
     __tablename__ = "item"
 
@@ -198,8 +193,18 @@ class Item(SQLBaseModel):
 
     record: Mapped[List["TradeRecord"]] = relationship(back_populates="item")
     questions: Mapped[List["Question"]] = relationship(back_populates="item")
-    tags: Mapped[List["Tag"]] = relationship(
-        secondary=association_items_tags, back_populates="items"
+    tags: AssociationProxy[List["Tag"]] = association_proxy(
+        "association_tags",
+        "tag",
+        creator=lambda tag_orm: AssociationItemTag(tag=tag_orm),
+    )
+    tag_name_list: AssociationProxy[List[str]] = association_proxy(
+        "association_tags",
+        "tag_name",
+        creator=lambda tag_str: AssociationItemTag(tag_name=tag_str),
+    )
+    association_tags: Mapped[List["AssociationItemTag"]] = relationship(
+        back_populates="item"
     )
     seller: Mapped["User"] = relationship(back_populates="items")
 
@@ -259,9 +264,33 @@ class Tag(SQLBaseModel):
     created_time: Mapped[TimeStamp]
     name: Mapped[NormalString]
 
-    items: Mapped[List["Item"]] = relationship(
-        secondary=association_items_tags, back_populates="tags"
+    association_items: Mapped[List["AssociationItemTag"]] = relationship(
+        back_populates="tag"
     )
+    items: AssociationProxy[List["Item"]] = association_proxy(
+        "association_items",
+        "item",
+        creator=lambda item_orm: AssociationItemTag(item=item_orm),
+    )
+
+
+class AssociationItemTag(SQLBaseModel):
+
+    __tablename__ = "association_items_tags"
+
+    association_items_tags_id: Mapped[IntPrimaryKey] = mapped_column(autoincrement=True)
+    item_id: Mapped[IntPrimaryKey] = mapped_column(ForeignKey("item.item_id"))
+    tag_id: Mapped[IntPrimaryKey] = mapped_column(ForeignKey("tag.tag_id"))
+    created_at: Mapped[TimeStamp]
+
+    tag: Mapped["Tag"] = relationship(
+        back_populates="association_items", lazy="immediate"
+    )
+    item: Mapped["Item"] = relationship(
+        back_populates="association_tags", lazy="immediate"
+    )
+
+    tag_name: AssociationProxy[str] = association_proxy("tag", "name")
 
 
 class Role(SQLBaseModel):

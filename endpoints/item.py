@@ -107,7 +107,7 @@ async def update_item(ss: SessionDep, user: CurrentUserDep, info: db_sche.ItemIn
 
     # update item
     item_orm = await item_provider.update_item(ss, info)
-    await item_orm.awaitable_attrs.tags
+    await item_orm.awaitable_attrs.association_tags
     return item_orm
 
 

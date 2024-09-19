@@ -54,6 +54,7 @@ class ItemOut(BaseModel):
 
     # this field need to be loaded manually in advance when validating from ORM class instance
     tags: list[TagOut] | None = None
+    tag_name_list: list[str] | None = None
 
 
 class ItemIn(BaseModel):

@@ -61,7 +61,12 @@ async def get_user_items(
     )
 
     # load tags
-    stmt = stmt.options(selectinload(orm.Item.tags))
+    if load_tags:
+        stmt = stmt.options(
+            selectinload(orm.Item.association_tags).options(
+                selectinload(orm.AssociationItemTag.tag)
+            )
+        )
 
     # determine order
     if time_desc:
@@ -110,17 +115,24 @@ async def get_user_item_count(ss: SessionDep, user_id: int) -> int:
 
 
 async def remove_tags_of_item(ss: SessionDep, item: orm.Item):
-    await item.awaitable_attrs.tags
+    """
+    Remove all tags from item, then return updated item
+    """
+    await item.awaitable_attrs.association_tags
     # create shallow copy of previous tags list
-    all_prev_tags = list(item.tags)
-    
-    for t in all_prev_tags:
-        item.tags.remove(t)
+    all_prev_tags_associations = list(item.association_tags)
+
+    # select all associations with this item id
+    stmt = select(orm.AssociationItemTag).where(orm.AssociationItemTag.item == item)
+    res = await ss.scalars(stmt)
+    asso_to_delete = res.all()
+    # set this associations as deleted
+    for asso in asso_to_delete:
+        asso.delete()
 
     try:
         await ss.commit()
         await ss.refresh(item)
-        await item.awaitable_attrs.tags
     except:
         await ss.rollback()
         raise
@@ -152,11 +164,17 @@ async def update_tags_of_item(
     # get tag orm instance list to be added
     tag_orm_list = await add_tags_if_not_exists(ss, tag_str_list)
 
-    if remove_prev:
-        await remove_tags_of_item(ss, item)
+    await ss.refresh(item, ["association_tags"])
+    assert item is not None
+    logger.debug(item.tags)
+    logger.debug(item.tag_name_list)
 
+    # remove previous tags
+    if remove_prev:
+        item = await remove_tags_of_item(ss, item)
+    
+    await item.awaitable_attrs.association_tags
     # add tags
-    await item.awaitable_attrs.tags
     for t in tag_orm_list:
         item.tags.append(t)
 
@@ -184,18 +202,18 @@ async def add_item(
     try:
         item_orm = orm.Item(**item.model_dump(exclude={"tags"}))
 
+        # add item to user
+        await user.awaitable_attrs.items
+        user.items.append(item_orm)
+        await ss.commit()
+        await ss.refresh(item_orm)
+
         # add tags to item
         tag_list = item.tags
         if tag_list is not None:
             item_orm = await update_tags_of_item(
                 ss, item_orm, tag_list, commit=False, remove_prev=False
             )
-
-        # add item to user
-        await user.awaitable_attrs.items
-        user.items.append(item_orm)
-        await ss.commit()
-        await ss.refresh(item_orm)
 
         # load tags of the item (because of refresh)
         await item_orm.awaitable_attrs.tags
@@ -240,9 +258,9 @@ async def check_item_belong_to_user(ss: SessionDep, item_id: int, user_id: int):
     await get_user_from_user_id(ss, user_id)
 
     stmt = select(orm.User).join(
-        orm.User.items.and_(orm.Item.deleted == False)
-        .and_(orm.Item.item_id == item_id)
-        .and_(orm.User.user_id == user_id)
+        orm.User.items.and_(orm.Item.item_id == item_id).and_(
+            orm.User.user_id == user_id
+        )
     )
 
     try:
