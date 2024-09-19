@@ -6,7 +6,7 @@ class BackendInfoOut(BaseModel):
     on_cloud: bool
 
 
-class BlukOpeartionInfo(BaseModel):
+class BulkOpeartionInfo(BaseModel):
     """
     Pydantic schema used when backend need to return the result of bulk operation,
     for example Delete All Items"""

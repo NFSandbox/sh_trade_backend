@@ -108,10 +108,10 @@ async def update_item(ss: SessionDep, user: CurrentUserDep, info: db_sche.ItemIn
     # update item
     item_orm = await item_provider.update_item(ss, info)
     await item_orm.awaitable_attrs.association_tags
-    return item_orm
+    return await ss.run_sync(lambda ss: db_sche.ItemOut.model_validate(item_orm))
 
 
-@item_router.delete("/remove_all", response_model=List[gene_sche.BlukOpeartionInfo])
+@item_router.delete("/remove_all", response_model=List[gene_sche.BulkOpeartionInfo])
 async def remove_all_items(ss: SessionDep, user: CurrentUserDep):
     """
     Remove all items of current user
@@ -133,7 +133,7 @@ async def remove_all_items(ss: SessionDep, user: CurrentUserDep):
 
 @item_router.delete(
     "/remove",
-    response_model=List[gene_sche.BlukOpeartionInfo],
+    response_model=List[gene_sche.BulkOpeartionInfo],
     responses=exc.openApiErrorMark({403: "Permission Required"}),
 )
 async def remove_items(ss: SessionDep, user: CurrentUserDep, item_id_list: list[int]):
@@ -255,7 +255,7 @@ async def answer_question(
 
 @item_router.delete(
     "/question/remove",
-    response_model=gene_sche.BlukOpeartionInfo,
+    response_model=gene_sche.BulkOpeartionInfo,
     responses=exc.openApiErrorMark(
         {404: "No Related User", 403: "No Permission To Answer"}
     ),

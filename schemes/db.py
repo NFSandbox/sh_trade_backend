@@ -35,6 +35,9 @@ class TagOut(BaseModel):
     tag_id: int
     tag_type: str
     name: str
+    
+    class Config:
+        from_attributes = True
 
 
 class ItemOut(BaseModel):
@@ -55,6 +58,9 @@ class ItemOut(BaseModel):
     # this field need to be loaded manually in advance when validating from ORM class instance
     tags: list[TagOut] | None = None
     tag_name_list: list[str] | None = None
+    
+    class Config:
+        from_attributes=True
 
 
 class ItemIn(BaseModel):

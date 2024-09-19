@@ -157,7 +157,7 @@ async def remove_contact_info(
 
 
 @user_router.delete(
-    "/contact_info/remove_all", response_model=gene_sche.BlukOpeartionInfo
+    "/contact_info/remove_all", response_model=gene_sche.BulkOpeartionInfo
 )
 async def remove_all_contact_info(ss: SessionDep, user: user_provider.CurrentUserDep):
     """
@@ -173,7 +173,7 @@ async def remove_all_contact_info(ss: SessionDep, user: user_provider.CurrentUse
 
     try:
         await ss.commit()
-        return gene_sche.BlukOpeartionInfo(
+        return gene_sche.BulkOpeartionInfo(
             operation="Remove all contact info", total=remove_count
         )
     except:

@@ -79,3 +79,22 @@ Examples:
         return get_user(session)
 
 """
+
+
+async def try_commit(ss: SessionDep):
+    """
+    Try commit the current session and return None.
+
+    Raise if failed to commit
+
+    Usage
+
+        session.add_all(some_entities)
+        await try_commit(session)
+    """
+    try:
+        await ss.commit()
+        return
+    except:
+        await ss.rollback()
+        raise

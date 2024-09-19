@@ -284,10 +284,10 @@ class AssociationItemTag(SQLBaseModel):
     created_at: Mapped[TimeStamp]
 
     tag: Mapped["Tag"] = relationship(
-        back_populates="association_items", lazy="immediate"
+        back_populates="association_items"
     )
     item: Mapped["Item"] = relationship(
-        back_populates="association_tags", lazy="immediate"
+        back_populates="association_tags"
     )
 
     tag_name: AssociationProxy[str] = association_proxy("tag", "name")

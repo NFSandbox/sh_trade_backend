@@ -16,7 +16,7 @@ from schemes import sql as orm
 from schemes import db as db_sche
 from schemes import general as gene_sche
 
-from .database import init_session_maker, session_maker, SessionDep
+from .database import init_session_maker, session_maker, SessionDep, try_commit
 from .user import CurrentUserDep, CurrentUserOrNoneDep, get_user_from_user_id
 
 from exception import error as exc
@@ -47,7 +47,7 @@ async def get_user_items(
     Get selling items of a user by user id
     """
     # promise user is valid
-    await get_user_from_user_id(ss, user_id)
+    user = await get_user_from_user_id(ss, user_id)
 
     # get items owned by this user that not been deleted
     stmt = (
@@ -166,13 +166,11 @@ async def update_tags_of_item(
 
     await ss.refresh(item, ["association_tags"])
     assert item is not None
-    logger.debug(item.tags)
-    logger.debug(item.tag_name_list)
 
     # remove previous tags
     if remove_prev:
         item = await remove_tags_of_item(ss, item)
-    
+
     await item.awaitable_attrs.association_tags
     # add tags
     for t in tag_orm_list:
@@ -422,7 +420,7 @@ async def remove_questions(
     questions: Sequence[orm.Question],
     commit: bool = True,
 ):
-    q_count = gene_sche.BlukOpeartionInfo(operation="Delete questions")
+    q_count = gene_sche.BulkOpeartionInfo(operation="Delete questions")
 
     for q in questions:
         if q.deleted_at is None:
@@ -430,11 +428,7 @@ async def remove_questions(
             q.delete()
 
     if commit:
-        try:
-            await ss.commit()
-        except:
-            await ss.rollback()
-            raise
+        await try_commit(ss)
 
     return q_count
 
@@ -477,11 +471,35 @@ async def get_cascade_questions_from_items(
     return res.all()
 
 
+async def get_cascade_association_items_tags_from_items(
+    ss: SessionDep, items: Sequence[orm.Item]
+):
+    stmt = select(orm.AssociationItemTag).where(
+        orm.AssociationItemTag.item_id.in_([i.item_id for i in items])
+    )
+    return (await ss.scalars(stmt)).all()
+
+
+async def remove_associations_items_tags(
+    ss: SessionDep, associations: Sequence[orm.AssociationItemTag], commit: bool = True
+):
+    count = gene_sche.BulkOpeartionInfo(operation="Remove item-tag associations")
+
+    for a in associations:
+        count.inc()
+        a.delete()
+
+    if commit:
+        await try_commit(ss)
+
+    return count
+
+
 async def remove_items_cascade(
     ss: SessionDep,
     items: Sequence[orm.Item],
     constraint: bool = False,
-) -> List[gene_sche.BlukOpeartionInfo]:
+) -> List[gene_sche.BulkOpeartionInfo]:
     """
     Soft delete a list of items, with cascade delete of all relavant data
 
@@ -493,14 +511,15 @@ async def remove_items_cascade(
     Cascade
 
     - `Question` All question related to these items
+    - `AssociationItemTag` All tags associations (todo)
 
     Raises
 
     - `cascade_constraint`
     """
     # record the effective delete count of all entities
-    q_count = gene_sche.BlukOpeartionInfo(operation="Cascading delete questions")
-    i_count = gene_sche.BlukOpeartionInfo(operation="Delete items")
+    i_count = gene_sche.BulkOpeartionInfo(operation="Delete items")
+
     try:
         # delete question cascade of item
         questions = await get_cascade_questions_from_items(ss, items)
@@ -509,8 +528,11 @@ async def remove_items_cascade(
             raise exc.CascadeConstraintError(
                 "Could not remove items with active questions"
             )
-
         q_count = await remove_questions(ss, questions, commit=False)
+
+        # remove tag associations
+        associations = await get_cascade_association_items_tags_from_items(ss, items)
+        t_count = await remove_associations_items_tags(ss, associations, commit=False)
 
         # delete items itself
         for i in items:
@@ -521,7 +543,7 @@ async def remove_items_cascade(
         await ss.commit()
 
         # return info
-        return [i_count, q_count]
+        return [i_count, q_count, t_count]
     except:
         await ss.rollback()
         raise
