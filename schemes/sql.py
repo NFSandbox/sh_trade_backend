@@ -125,6 +125,16 @@ class User(SQLBaseModel):
     )
     items: Mapped[List["Item"]] = relationship(back_populates="seller")
 
+    # relation about fav items
+    association_fav_items: Mapped[List["AssociationUserFavouriteItem"]] = relationship(
+        back_populates="user"
+    )
+    fav_items: AssociationProxy[List["Item"]] = association_proxy(
+        "association_fav_items",
+        "item",
+        creator=lambda item_orm: AssociationUserFavouriteItem(item=item_orm),
+    )
+
     async def verify_role(self, roles: str | list[str]) -> bool:
         """Check if this user has some roles
 
@@ -208,6 +218,16 @@ class Item(SQLBaseModel):
     )
     seller: Mapped["User"] = relationship(back_populates="items")
 
+    # relationships about fav user
+    association_faved_by_users: Mapped[List["AssociationUserFavouriteItem"]] = (
+        relationship(back_populates="item")
+    )
+    faved_users: AssociationProxy[List["User"]] = association_proxy(
+        "association_faved_by_users",
+        "user",
+        creator=lambda user_orm: AssociationUserFavouriteItem(user=user_orm),
+    )
+
 
 class TradeState(Enum):
     processing = "processing"
@@ -283,14 +303,27 @@ class AssociationItemTag(SQLBaseModel):
     tag_id: Mapped[IntPrimaryKey] = mapped_column(ForeignKey("tag.tag_id"))
     created_at: Mapped[TimeStamp]
 
-    tag: Mapped["Tag"] = relationship(
-        back_populates="association_items"
-    )
-    item: Mapped["Item"] = relationship(
-        back_populates="association_tags"
-    )
+    tag: Mapped["Tag"] = relationship(back_populates="association_items")
+    item: Mapped["Item"] = relationship(back_populates="association_tags")
 
     tag_name: AssociationProxy[str] = association_proxy("tag", "name")
+
+
+class AssociationUserFavouriteItem(SQLBaseModel):
+    __tablename__ = "association_user_favourite_item"
+
+    association_user_favourite_item_id: Mapped[IntPrimaryKey] = mapped_column(
+        autoincrement=True
+    )
+
+    user_id: Mapped[IntPrimaryKey] = mapped_column(ForeignKey("user.user_id"))
+    item_id: Mapped[IntPrimaryKey] = mapped_column(ForeignKey("item.item_id"))
+    created_at: Mapped[TimeStamp]
+
+    user: Mapped["User"] = relationship("User", back_populates="association_fav_items")
+    item: Mapped["Item"] = relationship(
+        "Item", back_populates="association_faved_by_users"
+    )
 
 
 class Role(SQLBaseModel):

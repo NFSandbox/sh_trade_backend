@@ -506,7 +506,7 @@ async def remove_items_cascade(
     Args
 
     - `items` The items need to be cascade delete
-    - `constraint` If `True`, raise error if has cascade items.
+    - `constraint` If `True`, raise error if has cascade items
 
     Cascade
 
