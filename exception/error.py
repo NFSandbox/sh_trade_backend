@@ -91,7 +91,7 @@ class NoResultError(BaseError):
         super().__init__(
             name="no_result",
             message=message,
-            status=404,
+            status=httpstatus.HTTP_404_NOT_FOUND,
         )
 
 
@@ -223,5 +223,19 @@ class DuplicatedError(BaseError):
         name: str = "already_exists",
         message: str = "Data already exists",
         status: int = httpstatus.HTTP_409_CONFLICT,
+    ) -> None:
+        super().__init__(name, message, status)
+
+
+class LimitExceededError(BaseError):
+    """
+    Raise when operation reachs some of the limitation of this system
+    """
+
+    def __init__(
+        self,
+        name: str = "limit_exceeded",
+        message: str = "System limit exceeded",
+        status: int = httpstatus.HTTP_400_BAD_REQUEST,
     ) -> None:
         super().__init__(name, message, status)

@@ -32,7 +32,7 @@ async def get_item_by_id(ss: SessionDep, item_id: int):
             raise
         return item
     except:
-        raise exc.NoResultError("The item that question points to does not exists")
+        raise exc.NoResultError(f"Could not find item with with id: {item_id}")
 
 
 async def get_user_items(

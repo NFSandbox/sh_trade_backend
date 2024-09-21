@@ -320,10 +320,8 @@ class AssociationUserFavouriteItem(SQLBaseModel):
     item_id: Mapped[IntPrimaryKey] = mapped_column(ForeignKey("item.item_id"))
     created_at: Mapped[TimeStamp]
 
-    user: Mapped["User"] = relationship("User", back_populates="association_fav_items")
-    item: Mapped["Item"] = relationship(
-        "Item", back_populates="association_faved_by_users"
-    )
+    user: Mapped["User"] = relationship(back_populates="association_fav_items")
+    item: Mapped["Item"] = relationship(back_populates="association_faved_by_users")
 
 
 class Role(SQLBaseModel):

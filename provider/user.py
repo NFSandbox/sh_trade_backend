@@ -194,6 +194,8 @@ async def get_all_active_buyers(ss: SessionDep, user_id: int):
 
     - Active buyer of a user means all other users that have **active processing trade records
       of an item owned by this user**
+    - The info returned by this function is usually used to check sellers' permission to access 
+      the contact info of a buyer
     """
 
     user1 = aliased(orm.User)
