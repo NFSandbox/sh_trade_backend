@@ -23,8 +23,8 @@ from schemes import db as db_sche
 from schemes import general as gene_sche
 
 from .database import init_session_maker, session_maker, SessionDep, try_commit
-from .user import CurrentUserDep, CurrentUserOrNoneDep, get_user_from_user_id
-from .item import get_item_by_id
+from .user.core import CurrentUserDep, CurrentUserOrNoneDep, get_user_from_user_id
+from .item.core import get_item_by_id
 
 from exception import error as exc
 
@@ -131,3 +131,28 @@ async def remove_fav_items(
     await try_commit(ss)
 
     return bulk_count
+
+
+async def get_cascade_fav_items_by_items(ss: SessionDep, items: Sequence[orm.Item]):
+    stmt = select(orm.AssociationUserFavouriteItem).where(
+        orm.AssociationUserFavouriteItem.item_id.in_([i.item_id for i in items])
+    )
+
+    return (await ss.scalars(stmt)).all()
+
+
+async def remove_fav_items_cascade(
+    ss: SessionDep,
+    associations: Sequence[orm.AssociationUserFavouriteItem],
+    commit: bool = True,
+) -> gene_sche.BulkOpeartionInfo:
+    count = gene_sche.BulkOpeartionInfo(operation="Remove user-fav-item associations")
+
+    for a in associations:
+        count.inc()
+        a.delete()
+
+    if commit:
+        await try_commit(ss)
+
+    return count

@@ -13,7 +13,8 @@ from config import sql
 _engine = create_async_engine(
     f"mysql+aiomysql://"
     f"{sql.DB_USERNAME}:{sql.DB_PASSWORD}"
-    f"@{sql.DB_HOST}/{sql.DB_NAME}"
+    f"@{sql.DB_HOST}/{sql.DB_NAME}",
+    echo=False,
 )
 
 # async version session maker

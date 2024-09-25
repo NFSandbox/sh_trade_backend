@@ -16,24 +16,32 @@ from schemes import sql as orm
 from schemes import db as db_sche
 from schemes import general as gene_sche
 
-from .database import init_session_maker, session_maker, SessionDep, try_commit
-from .user import CurrentUserDep, CurrentUserOrNoneDep, get_user_from_user_id
+from ..database import init_session_maker, session_maker, SessionDep, try_commit
+from ..user.core import CurrentUserDep, CurrentUserOrNoneDep, get_user_from_user_id
+from ..fav import get_cascade_fav_items_by_items, remove_fav_items_cascade
+
+from .core import *
+
 
 from exception import error as exc
 
 init_session_maker()
 
-
-async def get_item_by_id(ss: SessionDep, item_id: int):
-    # get item
-    try:
-        item = await ss.get(orm.Item, item_id)
-        if item is None or item.deleted_at is not None:
-            raise
-        return item
-    except:
-        raise exc.NoResultError(f"Could not find item with with id: {item_id}")
-
+__all__ = [
+    "get_user_item_count",
+    "update_tags_of_item",
+    "add_item",
+    "update_item",
+    "check_item_belong_to_user",
+    "get_question_by_id",
+    "get_question_by_id",
+    "check_question_belongs_to_user",
+    "answer_question",
+    "get_tags_by_names",
+    "add_tags_if_not_exists",
+    "remove_tags_of_item",
+    "get_user_items",
+]
 
 async def get_user_items(
     ss: SessionDep,
@@ -114,32 +122,6 @@ async def get_user_item_count(ss: SessionDep, user_id: int) -> int:
     return res
 
 
-async def remove_tags_of_item(ss: SessionDep, item: orm.Item):
-    """
-    Remove all tags from item, then return updated item
-    """
-    await item.awaitable_attrs.association_tags
-    # create shallow copy of previous tags list
-    all_prev_tags_associations = list(item.association_tags)
-
-    # select all associations with this item id
-    stmt = select(orm.AssociationItemTag).where(orm.AssociationItemTag.item == item)
-    res = await ss.scalars(stmt)
-    asso_to_delete = res.all()
-    # set this associations as deleted
-    for asso in asso_to_delete:
-        asso.delete()
-
-    try:
-        await ss.commit()
-        await ss.refresh(item)
-    except:
-        await ss.rollback()
-        raise
-
-    return item
-
-
 async def update_tags_of_item(
     ss: SessionDep,
     item: orm.Item,
@@ -188,6 +170,32 @@ async def update_tags_of_item(
     return item
 
 
+async def remove_tags_of_item(ss: SessionDep, item: orm.Item):
+    """
+    Remove all tags from item, then return updated item
+    """
+    await item.awaitable_attrs.association_tags
+    # create shallow copy of previous tags list
+    all_prev_tags_associations = list(item.association_tags)
+
+    # select all associations with this item id
+    stmt = select(orm.AssociationItemTag).where(orm.AssociationItemTag.item == item)
+    res = await ss.scalars(stmt)
+    asso_to_delete = res.all()
+    # set this associations as deleted
+    for asso in asso_to_delete:
+        asso.delete()
+
+    try:
+        await ss.commit()
+        await ss.refresh(item)
+    except:
+        await ss.rollback()
+        raise
+
+    return item
+
+
 async def add_item(
     ss: SessionDep,
     user: CurrentUserDep,
@@ -203,8 +211,6 @@ async def add_item(
         # add item to user
         await user.awaitable_attrs.items
         user.items.append(item_orm)
-        await ss.commit()
-        await ss.refresh(item_orm)
 
         # add tags to item
         tag_list = item.tags
@@ -212,6 +218,8 @@ async def add_item(
             item_orm = await update_tags_of_item(
                 ss, item_orm, tag_list, commit=False, remove_prev=False
             )
+        
+        await ss.commit()
 
         # load tags of the item (because of refresh)
         await item_orm.awaitable_attrs.tags
@@ -410,167 +418,6 @@ async def answer_question(ss: SessionDep, question_id: int, answer: str):
         await ss.commit()
         await ss.refresh(question)
         return question
-    except:
-        await ss.rollback()
-        raise
-
-
-async def remove_questions(
-    ss: SessionDep,
-    questions: Sequence[orm.Question],
-    commit: bool = True,
-):
-    q_count = gene_sche.BulkOpeartionInfo(operation="Delete questions")
-
-    for q in questions:
-        if q.deleted_at is None:
-            q_count.inc()
-            q.delete()
-
-    if commit:
-        await try_commit(ss)
-
-    return q_count
-
-
-async def get_cascade_items_from_users(
-    ss: SessionDep, users: Sequence[orm.User], exclude_deleted: bool = True
-):
-    """
-    Get a list of sellers(`User`) from a list of items(`Item`)
-    """
-
-    # construct statement
-    stmt = (
-        select(orm.Item)
-        .join(orm.Item.seller)
-        .where(orm.User.user_id.in_([u.user_id for u in users]))
-    )
-    if exclude_deleted:
-        stmt = stmt.where(orm.Item.deleted_at == None)
-
-    res = await ss.scalars(stmt)
-    items = res.all()
-
-    return items
-
-
-async def get_cascade_questions_from_items(
-    ss: SessionDep, items: Sequence[orm.Item], exclude_deleted: bool = True
-):
-    stmt = (
-        select(orm.Question)
-        .join(orm.Question.item)
-        .where(orm.Item.item_id.in_([i.item_id for i in items]))
-    )
-
-    if exclude_deleted:
-        stmt = stmt.where(orm.Question.deleted_at == None)
-
-    res = await ss.scalars(stmt)
-    return res.all()
-
-
-async def get_cascade_association_items_tags_from_items(
-    ss: SessionDep, items: Sequence[orm.Item]
-):
-    stmt = select(orm.AssociationItemTag).where(
-        orm.AssociationItemTag.item_id.in_([i.item_id for i in items])
-    )
-    return (await ss.scalars(stmt)).all()
-
-
-async def remove_associations_items_tags(
-    ss: SessionDep, associations: Sequence[orm.AssociationItemTag], commit: bool = True
-):
-    count = gene_sche.BulkOpeartionInfo(operation="Remove item-tag associations")
-
-    for a in associations:
-        count.inc()
-        a.delete()
-
-    if commit:
-        await try_commit(ss)
-
-    return count
-
-
-async def remove_items_cascade(
-    ss: SessionDep,
-    items: Sequence[orm.Item],
-    constraint: bool = False,
-) -> List[gene_sche.BulkOpeartionInfo]:
-    """
-    Soft delete a list of items, with cascade delete of all relavant data
-
-    Args
-
-    - `items` The items need to be cascade delete
-    - `constraint` If `True`, raise error if has cascade items
-
-    Cascade
-
-    - `Question` All question related to these items
-    - `AssociationItemTag` All tags associations (todo)
-
-    Raises
-
-    - `cascade_constraint`
-    """
-    # record the effective delete count of all entities
-    i_count = gene_sche.BulkOpeartionInfo(operation="Delete items")
-
-    try:
-        # delete question cascade of item
-        questions = await get_cascade_questions_from_items(ss, items)
-        # raise error if constraint
-        if constraint and len(questions) > 0:
-            raise exc.CascadeConstraintError(
-                "Could not remove items with active questions"
-            )
-        q_count = await remove_questions(ss, questions, commit=False)
-
-        # remove tag associations
-        associations = await get_cascade_association_items_tags_from_items(ss, items)
-        t_count = await remove_associations_items_tags(ss, associations, commit=False)
-
-        # delete items itself
-        for i in items:
-            if i.deleted_at == None:
-                i_count.inc()
-            i.delete()
-
-        await ss.commit()
-
-        # return info
-        return [i_count, q_count, t_count]
-    except:
-        await ss.rollback()
-        raise
-
-
-async def clean_up_question_with_deleted_items(ss: SessionDep):
-    """A cleaning function used to remove items that points to soft-deleted items"""
-
-    stmt_question_with_deleted_items = select(orm.Question).join(
-        orm.Question.item.and_(orm.Item.deleted_at != None).and_(
-            orm.Question.deleted_at == None,
-        )
-    )
-
-    res = await ss.scalars(stmt_question_with_deleted_items)
-    questions = res.all()
-
-    count = 0
-    for q in questions:
-        if q.deleted_at == None:
-            q.delete()
-            count += 1
-
-    try:
-        await ss.commit()
-        logger.info(f"Cleaned {count} unnecessary questions from database")
-        return count
     except:
         await ss.rollback()
         raise
