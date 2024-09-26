@@ -3,18 +3,22 @@ import time
 from loguru import logger
 import fire
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from provider import database
 from schemes.sql import SQLBaseModel
 from schemes import sql as orm
 from schemes import db as db_sche
 
+from config import sql
 
-async def init_models():
-    async with database._engine.begin() as session:
-        await session.run_sync(SQLBaseModel.metadata.drop_all)
-        await session.run_sync(SQLBaseModel.metadata.create_all)
+from provider.database import session_manager, _engine
+
+
+async def init_models(no_drop: bool = False):
+    async with _engine.begin() as conn:
+        if not no_drop:
+            await conn.run_sync(SQLBaseModel.metadata.drop_all)
+        await conn.run_sync(SQLBaseModel.metadata.create_all)
 
 
 DEFAULT_USERS = [
@@ -39,8 +43,7 @@ DEFAULT_ROLES = [
 
 
 async def add_default_data():
-    session_maker = database.init_session_maker()
-    async with session_maker() as ss:
+    async with session_manager() as ss:
         async with ss.begin():
 
             logger.info("Adding default users...")
@@ -66,25 +69,39 @@ async def add_default_data():
                     contact_info="nf@nfblogs.com",
                 )
             )
+        # auto commit
+    # auto close ss
 
 
-async def async_main(y: bool = False):
-
-    logger.warning(
-        "Executing this script will drop all previous data in the database, "
-        "which may led to unreversible data loss. "
-    )
-
-    if not y:
-        logger.error(
-            "If you want to continue this process, run 'python create_db.py -y'"
+async def async_main(y: bool = False, no_drop: bool = False, h: bool = False):
+    # show help text, then return
+    if h:
+        logger.info(
+            "Usage of create_db.py"
+            "\n-y Confirm action."
+            "\n--no-drop Do not drop previous table when creating new one"
+            "\n-h Show help text"
         )
         return
+
+    if no_drop:
+        logger.success("No-drop mode enabled")
+    else:
+        logger.warning(
+            "Executing this script will drop all previous data in the database, "
+            "which may lead to unreversible data loss. "
+        )
+
+        if not y:
+            logger.error(
+                "If you want to continue this process, run 'python create_db.py -y'"
+            )
+            return
 
     logger.info("Database initialization started")
 
     logger.info("Initialize database schemas...")
-    await init_models()
+    await init_models(no_drop=no_drop)
 
     logger.info("Filling test data...")
     await add_default_data()

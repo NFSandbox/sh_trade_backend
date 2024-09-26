@@ -1,4 +1,5 @@
 import time
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 from loguru import logger
@@ -14,7 +15,7 @@ _engine = create_async_engine(
     f"mysql+aiomysql://"
     f"{sql.DB_USERNAME}:{sql.DB_PASSWORD}"
     f"@{sql.DB_HOST}/{sql.DB_NAME}",
-    echo=False,
+    echo=sql.ENGINE_ECHO,
 )
 
 # async version session maker
@@ -61,7 +62,10 @@ async def get_session():
     async with maker() as session:
         # logger.debug(f'Before yield session')
         yield session
-        # logger.debug(f'After yield session')
+    logger.debug("Session closed")
+
+
+session_manager = asynccontextmanager(get_session)
 
 
 def add_eager_load_to_stmt(stmt: Select, attr_list: list[QueryableAttribute]):
