@@ -66,6 +66,7 @@ LongString = Annotated[str, mapped_column(String(100))]
 VeryLongString = Annotated[str, mapped_column(String(500))]
 ParagraphString = Annotated[str, mapped_column(String(2000))]
 TimeStamp = Annotated[int, mapped_column(default=get_current_timestamp_ms)]
+NullableTimeStamp = Annotated[int, mapped_column(nullable=True, default=None)]
 
 
 class PaginationConfig(BaseModel):
@@ -205,6 +206,7 @@ class Item(SQLBaseModel):
     processing_trade: Mapped["TradeRecord | None"] = relationship(
         "TradeRecord",
         primaryjoin="and_(Item.item_id==TradeRecord.item_id, TradeRecord.state=='processing')",
+        viewonly=True,
     )
 
     questions: Mapped[List["Question"]] = relationship(back_populates="item")
@@ -258,9 +260,9 @@ class TradeRecord(SQLBaseModel):
     item_id: Mapped[int] = mapped_column(ForeignKey("item.item_id"))
 
     created_time: Mapped[TimeStamp]
-    accepted_time: Mapped[TimeStamp] = mapped_column(nullable=True)
-    confirmed_time: Mapped[TimeStamp] = mapped_column(nullable=True)
-    completed_time: Mapped[TimeStamp] = mapped_column(nullable=True)
+    accepted_time: Mapped[NullableTimeStamp]
+    confirmed_time: Mapped[NullableTimeStamp]
+    completed_time: Mapped[NullableTimeStamp]
 
     review_from_buyer: Mapped[ParagraphString | None] = mapped_column(nullable=True)
     review_from_seller: Mapped[ParagraphString | None] = mapped_column(nullable=True)
