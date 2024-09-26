@@ -235,7 +235,7 @@ class Item(SQLBaseModel):
 
 
 class TradeState(Enum):
-    holding = "holding"
+    pending = "pending"
     processing = "processing"
     success = "success"
     cancelled = "cancelled"
@@ -264,7 +264,7 @@ class TradeRecord(SQLBaseModel):
 
     review_from_buyer: Mapped[ParagraphString | None] = mapped_column(nullable=True)
     review_from_seller: Mapped[ParagraphString | None] = mapped_column(nullable=True)
-    state: Mapped[TradeState] = mapped_column(default=TradeState.holding)
+    state: Mapped[TradeState] = mapped_column(default=TradeState.pending)
     cancel_reason: Mapped[TradeCancelReason | None] = mapped_column(nullable=True)
 
     buyer: Mapped["User"] = relationship(back_populates="buys", foreign_keys=[buyer_id])
