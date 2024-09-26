@@ -163,7 +163,7 @@ async def remove_items_cascade(
         t_count = await remove_associations_items_tags(ss, associations, commit=False)
 
         # late import
-        from ..fav import remove_fav_items_cascade, get_cascade_fav_items_by_items
+        from ..fav.core import remove_fav_items_cascade, get_cascade_fav_items_by_items
 
         # remove fav item association
         asso_fav_items = await get_cascade_fav_items_by_items(ss, items)

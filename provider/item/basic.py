@@ -18,7 +18,7 @@ from schemes import general as gene_sche
 
 from ..database import init_session_maker, session_maker, SessionDep, try_commit
 from ..user.core import CurrentUserDep, CurrentUserOrNoneDep, get_user_from_user_id
-from ..fav import get_cascade_fav_items_by_items, remove_fav_items_cascade
+from ..fav.core import get_cascade_fav_items_by_items, remove_fav_items_cascade
 
 from .core import *
 
@@ -42,6 +42,7 @@ __all__ = [
     "remove_tags_of_item",
     "get_user_items",
 ]
+
 
 async def get_user_items(
     ss: SessionDep,
@@ -218,7 +219,7 @@ async def add_item(
             item_orm = await update_tags_of_item(
                 ss, item_orm, tag_list, commit=False, remove_prev=False
             )
-        
+
         await ss.commit()
 
         # load tags of the item (because of refresh)
