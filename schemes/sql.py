@@ -201,7 +201,12 @@ class Item(SQLBaseModel):
     price: Mapped[int] = mapped_column()
     state: Mapped[ItemState] = mapped_column(default=ItemState.valid)
 
-    record: Mapped[List["TradeRecord"]] = relationship(back_populates="item")
+    trades: Mapped[List["TradeRecord"]] = relationship(back_populates="item")
+    processing_trade: Mapped["TradeRecord | None"] = relationship(
+        "TradeRecord",
+        primaryjoin="and_(Item.item_id==TradeRecord.item_id, TradeRecord.state=='processing')",
+    )
+
     questions: Mapped[List["Question"]] = relationship(back_populates="item")
     tags: AssociationProxy[List["Tag"]] = association_proxy(
         "association_tags",
@@ -230,9 +235,18 @@ class Item(SQLBaseModel):
 
 
 class TradeState(Enum):
+    holding = "holding"
     processing = "processing"
     success = "success"
     cancelled = "cancelled"
+
+
+class TradeCancelReason(Enum):
+    seller_rejected = "seller_rejected"
+    seller_accept_timeout = "seller_accept_timeout"
+    cancelled_by_buyer = "cancelled_by_buyer"
+    cancelled_by_seller = "cancelled_by_seller"
+    seller_confirm_timeout = "seller_confirm_timeout"
 
 
 class TradeRecord(SQLBaseModel):
@@ -244,12 +258,17 @@ class TradeRecord(SQLBaseModel):
     item_id: Mapped[int] = mapped_column(ForeignKey("item.item_id"))
 
     created_time: Mapped[TimeStamp]
-    review_from_buyer: Mapped[ParagraphString | None]
-    review_from_seller: Mapped[ParagraphString | None]
-    state: Mapped[TradeState] = mapped_column(default=TradeState.processing)
+    accepted_time: Mapped[TimeStamp] = mapped_column(nullable=True)
+    confirmed_time: Mapped[TimeStamp] = mapped_column(nullable=True)
+    completed_time: Mapped[TimeStamp] = mapped_column(nullable=True)
+
+    review_from_buyer: Mapped[ParagraphString | None] = mapped_column(nullable=True)
+    review_from_seller: Mapped[ParagraphString | None] = mapped_column(nullable=True)
+    state: Mapped[TradeState] = mapped_column(default=TradeState.holding)
+    cancel_reason: Mapped[TradeCancelReason | None] = mapped_column(nullable=True)
 
     buyer: Mapped["User"] = relationship(back_populates="buys", foreign_keys=[buyer_id])
-    item: Mapped["Item"] = relationship(back_populates="record")
+    item: Mapped["Item"] = relationship(back_populates="trades")
 
 
 class Question(SQLBaseModel):

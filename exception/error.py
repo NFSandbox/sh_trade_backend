@@ -86,10 +86,11 @@ class NoResultError(BaseError):
 
     def __init__(
         self,
+        name="no_result",
         message: str = "Could not found any result satisfying condition from database.",
     ) -> None:
         super().__init__(
-            name="no_result",
+            name=name,
             message=message,
             status=httpstatus.HTTP_404_NOT_FOUND,
         )

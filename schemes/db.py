@@ -35,7 +35,7 @@ class TagOut(BaseModel):
     tag_id: int
     tag_type: str
     name: str
-    
+
     class Config:
         from_attributes = True
 
@@ -58,9 +58,9 @@ class ItemOut(BaseModel):
     # this field need to be loaded manually in advance when validating from ORM class instance
     tags: list[TagOut] | None = None
     tag_name_list: list[str] | None = None
-    
+
     class Config:
-        from_attributes=True
+        from_attributes = True
 
 
 class ItemIn(BaseModel):
@@ -90,3 +90,20 @@ class QuestionOut(BaseModel):
     answered_time: int | None = None
     answer: str | None = None
     public: bool
+
+
+class TradeRecordOut(BaseModel):
+    trade_id: int
+    buyer: UserOut
+    item: ItemOut
+
+    created_time: int
+    accepted_time: int | None
+    confirmed_time: int | None
+    completed_time: int | None
+
+    state: orm.TradeState
+    cancel_reason: orm.TradeCancelReason | None
+    
+    class Config:
+        from_attributes = True

@@ -130,3 +130,11 @@ async def get_user_from_user_id(
         raise exc.NoResultError(message=f"User with id:{user_id} not exists") from e
 
     return res
+
+
+async def get_user_contact_info_count(ss: SessionDep, user: orm.User):
+    """
+    Return count of user contact info
+    """
+    count = await ss.run_sync(lambda x: len(user.contact_info))
+    return count

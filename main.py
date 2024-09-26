@@ -18,6 +18,7 @@ from endpoints.auth import auth_router, token_router
 from endpoints.user import user_router
 from endpoints.item import item_router
 from endpoints.fav import fav_router
+from endpoints.trade import trade_router
 
 # CORS Middleware
 middlewares = [
@@ -37,6 +38,7 @@ app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/user", tags=["User"])
 app.include_router(item_router, prefix="/item", tags=["Item"])
 app.include_router(fav_router, prefix="/fav", tags=["Favourite"])
+app.include_router(trade_router, prefix='/trade', tags=['Trade'])
 
 
 @app.exception_handler(RequestValidationError)
