@@ -1,9 +1,9 @@
-from typing import Annotated, cast, List
+from typing import Annotated, cast, List, Sequence
 
 from loguru import logger
 from sqlalchemy import select, func, Column, distinct
 from sqlalchemy.orm import selectinload, QueryableAttribute, aliased
-from sqlalchemy.sql import and_
+from sqlalchemy.sql import and_, or_
 from sqlalchemy import exc as sqlexc
 
 from config import system as sys_conf
@@ -45,21 +45,104 @@ async def check_item_validity_to_start_transaction(ss: SessionDep, item: orm.Ite
     return True
 
 
+async def check_buyer_is_not_owner_of_item(
+    ss: SessionDep, buyer: orm.User, item: orm.Item
+):
+    """
+    Check that buyer is not the owner of the target item himself
+
+    Raises
+
+    - `identical_seller_buyer` (409)
+    """
+    # get seller of item
+    seller: orm.User = await ss.run_sync(lambda ss: item.seller)
+
+    # raise
+    if seller.user_id == buyer.user_id:
+        raise exc.ConflictError(
+            name="identical_seller_buyer",
+            message="The seller and buyer of an item could not be the same user",
+        )
+
+
+async def check_no_existing_processing_transaction(
+    ss: SessionDep, buyer: orm.User, item: orm.Item
+):
+    """
+    Check if the buyer already have a pending transaction with the item
+
+    Use case
+
+    - Buyer may already start a transaction with this item, and the transaction
+      is waiting for seller's acceptance.
+    - Buyer may already have a _processing_ transaction with thie item.
+
+    Raises
+
+    - `duplicated_transaction` (409)
+    """
+
+    stmt = (
+        select(func.count())
+        .select_from(orm.TradeRecord)
+        .join(orm.TradeRecord.buyer)
+        .where(
+            and_(
+                # determine the item we need to check
+                orm.TradeRecord.item_id == item.item_id,
+                # check if any transaction in:
+                # - pending
+                # - processing
+                or_(
+                    orm.TradeRecord.state == orm.TradeState.processing,
+                    orm.TradeRecord.state == orm.TradeState.pending,
+                ),
+                # actually duplicated, relation will handle this
+                orm.TradeRecord.buyer_id == buyer.user_id,
+            )
+        )
+    )
+
+    # check if there's duplictation
+    dup_transactions = await ss.scalar(stmt)
+    # there should be a return result, which is the count of duplicated transaction
+    assert dup_transactions is not None
+
+    # raise if duplicated
+    if dup_transactions > 0:
+        raise exc.DuplicatedError(
+            name="duplicated_transaction",
+            message="There is already a transaction with this item and buyer",
+        )
+
+
 async def check_validity_to_start_transaction(
     ss: SessionDep, user: orm.User, item: orm.Item
 ):
     """
-    Check the buyer and item validity of creating a new transaction between them
+    Check the buyer and item validity of creating a new transaction between them.
+
+    This function act as a general inclusive function to check several validities
+    before starting a transaction. The code should promise all condition will be
+    satisfied and it's safe to start a transaction if this function has passed.
 
     Raises
 
     - `processing_transaction_exists` (409)
+    - `duplicated_transaction` (409)
+    - `identical_seller_buyer` (409)
     - `invalid_item` (404)
     - `no_valid_contact_info` (404)
     - `processing_transaction_limit_exceeded` (400)
+
+    For more info about validity check, check out
+    [Project Wiki - Transaction Design](https://github.com/NFSandbox/sh_trade_backend/wiki/Transaction-Design)
     """
     await check_item_validity_to_start_transaction(ss, item)
     await check_user_validity_to_start_transaction(ss, user)
+    await check_buyer_is_not_owner_of_item(ss, user, item)
+    await check_no_existing_processing_transaction(ss, user, item)
 
 
 async def check_user_validity_to_start_transaction(ss: SessionDep, user: orm.User):
@@ -110,7 +193,7 @@ async def start_transaction(
     Start a transaction with given user and item, check item validity before create.
 
     The newly created transaction will be in the `holding` state, waiting for seller
-    to accept.
+    to accept. (The default behaviour is controlled by ORM class definition)
 
     Return
 
@@ -122,11 +205,18 @@ async def start_transaction(
 
     Raises
 
-    - `processing_transaction_exists` (409)
+    - `processing_transaction_exists` (409) Item already have a processing transaction
+    - `duplicated_transaction` (409) User already have a valid transaction with this item
+    - `identical_seller_buyer` (409)
+    - `invalid_item` (404)
+    - `no_valid_contact_info` (404)
+    - `processing_transaction_limit_exceeded` (400)
+
+    All validity checking is handled in `check_validity_to_start_transaction()`
     """
     # check item validity
     if not skip_check:
-        await check_item_validity_to_start_transaction(ss, item)
+        await check_validity_to_start_transaction(ss, user, item)
 
     # create new transaction
     new_transaction = orm.TradeRecord(buyer=user, item=item)
@@ -139,9 +229,24 @@ async def start_transaction(
     return new_transaction
 
 
-async def get_seller_holding_transactions(ss: SessionDep, seller: orm.User):
+async def get_transactions(
+    ss: SessionDep,
+    user: orm.User,
+    states: Sequence[orm.TradeState],
+):
     """
-    Get a list of transaction that waiting for acception of certain user as the seller.
+    Get related transactions of a user
     """
     # todo
-    pass
+
+    # get all transaction of a certain user with certain states
+    stmt = select(orm.TradeRecord).where(
+        and_(
+            orm.TradeRecord.buyer_id == user.user_id,
+            orm.TradeRecord.state.in_(states),
+        )
+    )
+
+    trade_list = (await ss.scalars(stmt)).all()
+
+    return trade_list

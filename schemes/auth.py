@@ -1,3 +1,7 @@
+"""
+Declare all models used in authorization/authentication process.
+"""
+
 import time
 from pydantic import BaseModel
 import jwt

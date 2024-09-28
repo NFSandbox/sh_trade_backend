@@ -1,3 +1,7 @@
+"""
+Declare all schemas related to an SQL entities, used for API I/O validations.
+"""
+
 from typing import Optional, Annotated
 from schemes import sql as orm
 
@@ -104,6 +108,6 @@ class TradeRecordOut(BaseModel):
 
     state: orm.TradeState
     cancel_reason: orm.TradeCancelReason | None
-    
+
     class Config:
         from_attributes = True

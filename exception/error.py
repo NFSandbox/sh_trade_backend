@@ -240,3 +240,17 @@ class LimitExceededError(BaseError):
         status: int = httpstatus.HTTP_400_BAD_REQUEST,
     ) -> None:
         super().__init__(name, message, status)
+
+
+class ConflictError(BaseError):
+    """
+    Raise when user's request cause a conflict with current state of system
+    """
+
+    def __init__(
+        self,
+        name: str = "conflict_error",
+        message: str = "The operation causes conflict in the system",
+        status: int = httpstatus.HTTP_409_CONFLICT,
+    ) -> None:
+        super().__init__(name, message, status)
