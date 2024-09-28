@@ -11,6 +11,7 @@ from schemes import general as gene_sche
 from schemes import sql as orm
 
 from provider import user as user_provider
+from provider.user import CurrentUserDep, CurrentUserOrNoneDep
 from provider import database as db_provider
 from provider.database import SessionDep
 from exception import error as exc
@@ -43,7 +44,7 @@ async def update_description(
     """
 
     # using user_id to specify user, need to check roles
-    if (user_id is not None) and (not await user.verify_role(["admin"])):
+    if (user_id is not None) and (not await user.verify_role(session, ["admin"])):
         raise exc.PermissionError(
             message="You don't have permission to change other users description.",
             roles=await user.awaitable_attrs.roles,
@@ -133,7 +134,7 @@ async def remove_contact_info(
     - `no_result`
     """
     logger.debug(select(orm.User).join(orm.User.items))
-    
+
     contact_info_list = await user_provider.get_user_contact_info_list(ss, user)
 
     found_flag = False
@@ -179,3 +180,22 @@ async def remove_all_contact_info(ss: SessionDep, user: user_provider.CurrentUse
     except:
         await ss.rollback()
         raise
+
+
+@user_router.delete("/remove", response_model=List[gene_sche.BulkOpeartionInfo])
+async def remove_user(ss: SessionDep, user: CurrentUserDep):
+    """
+    Delete all info of currently signed in user
+
+    Dangerous
+
+    This endpoints will remove ALL info relavant to a user, please make sure
+    no miscall to this endpoint.
+    """
+    # todo
+    # validity check before remove users
+    # - have no ongoing transaction
+    # - have no any published visible items etc...
+
+    totals = await user_provider.remove_users_cascade(ss, [user])
+    return totals

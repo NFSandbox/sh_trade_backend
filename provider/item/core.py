@@ -47,7 +47,7 @@ async def remove_questions(
     ss: SessionDep,
     questions: Sequence[orm.Question],
     commit: bool = True,
-):
+) -> list[gene_sche.BulkOpeartionInfo]:
     q_count = gene_sche.BulkOpeartionInfo(operation="Delete questions")
 
     for q in questions:
@@ -58,7 +58,7 @@ async def remove_questions(
     if commit:
         await try_commit(ss)
 
-    return q_count
+    return [q_count]
 
 
 async def get_cascade_items_from_users(
@@ -83,6 +83,19 @@ async def get_cascade_items_from_users(
     return items
 
 
+async def get_cascade_association_fav_items_from_user(
+    ss: SessionDep, users: Sequence[orm.User]
+):
+    """
+    Get fav items association of a list of users
+    """
+    stmt = select(orm.AssociationUserFavouriteItem).where(
+        orm.AssociationUserFavouriteItem.user_id.in_([u.user_id for u in users])
+    )
+
+    return (await ss.scalars(stmt)).all()
+
+
 async def get_cascade_questions_from_items(
     ss: SessionDep, items: Sequence[orm.Item], exclude_deleted: bool = True
 ):
@@ -97,6 +110,15 @@ async def get_cascade_questions_from_items(
 
     res = await ss.scalars(stmt)
     return res.all()
+
+
+async def get_cascade_questions_from_askers(ss: SessionDep, askers: Sequence[orm.User]):
+    """Get questions by a list of askers"""
+    askers_id_list = [a.user_id for a in askers]
+
+    stmt = select(orm.Question).where(orm.Question.asker_id.in_(askers_id_list))
+
+    return (await ss.scalars(stmt)).all()
 
 
 async def get_cascade_association_items_tags_from_items(
@@ -127,6 +149,7 @@ async def remove_items_cascade(
     ss: SessionDep,
     items: Sequence[orm.Item],
     constraint: bool = False,
+    commit: bool = True,
 ) -> List[gene_sche.BulkOpeartionInfo]:
     """
     Soft delete a list of items, with cascade delete of all relavant data
@@ -148,41 +171,36 @@ async def remove_items_cascade(
     # record the effective delete count of all entities
     i_count = gene_sche.BulkOpeartionInfo(operation="Delete items")
 
-    try:
-        # delete question cascade of item
-        questions = await get_cascade_questions_from_items(ss, items)
-        # raise error if constraint
-        if constraint and len(questions) > 0:
-            raise exc.CascadeConstraintError(
-                "Could not remove items with active questions"
-            )
-        q_count = await remove_questions(ss, questions, commit=False)
+    # delete question cascade of item
+    questions = await get_cascade_questions_from_items(ss, items)
+    # raise error if constraint
+    if constraint and len(questions) > 0:
+        raise exc.CascadeConstraintError("Could not remove items with active questions")
+    q_count_list = await remove_questions(ss, questions, commit=False)
 
-        # remove tag associations
-        associations = await get_cascade_association_items_tags_from_items(ss, items)
-        t_count = await remove_associations_items_tags(ss, associations, commit=False)
+    # remove tag associations
+    associations = await get_cascade_association_items_tags_from_items(ss, items)
+    t_count = await remove_associations_items_tags(ss, associations, commit=False)
 
-        # late import
-        from ..fav.core import remove_fav_items_cascade, get_cascade_fav_items_by_items
+    # late import
+    from ..fav.core import remove_fav_items_cascade, get_cascade_fav_items_by_items
 
-        # remove fav item association
-        asso_fav_items = await get_cascade_fav_items_by_items(ss, items)
+    # remove fav item association
+    asso_fav_items = await get_cascade_fav_items_by_items(ss, items)
 
-        fav_count = await remove_fav_items_cascade(ss, asso_fav_items, commit=False)
+    fav_count = await remove_fav_items_cascade(ss, asso_fav_items, commit=False)
 
-        # delete items itself
-        for i in items:
-            if i.deleted_at == None:
-                i_count.inc()
-            i.delete()
+    # delete items itself
+    for i in items:
+        if i.deleted_at == None:
+            i_count.inc()
+        i.delete()
 
-        await ss.commit()
+    if commit:
+        await try_commit(ss)
 
-        # return info
-        return [i_count, q_count, t_count, fav_count]
-    except:
-        await ss.rollback()
-        raise
+    # return info
+    return [i_count] + q_count_list + [t_count] + fav_count
 
 
 async def clean_up_question_with_deleted_items(ss: SessionDep):

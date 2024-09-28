@@ -1,4 +1,4 @@
-from typing import Annotated, cast, List
+from typing import Annotated, cast, List, Sequence
 
 from loguru import logger
 from sqlalchemy import select, func, Column, distinct
@@ -13,8 +13,9 @@ from config import auth as auth_conf
 from schemes import sql as orm
 from schemes import auth as auth_sche
 from schemes import db as db_sche
+from schemes import general as gene_sche
 
-from ..database import init_session_maker, session_maker, SessionDep
+from ..database import init_session_maker, session_maker, SessionDep, try_commit
 
 from exception import error as exc
 
@@ -28,6 +29,7 @@ __all__ = [
     "get_current_user_or_none",
     "get_current_user",
     "get_current_token",
+    "remove_users_cascade",
 ]
 
 
@@ -63,7 +65,6 @@ async def get_current_user(
     return await get_user_from_user_id(
         session,
         user_id=token.user_id,
-        eager_load=[orm.User.roles],
     )
 
 
@@ -138,3 +139,145 @@ async def get_user_contact_info_count(ss: SessionDep, user: orm.User):
     """
     count = await ss.run_sync(lambda x: len(user.contact_info))
     return count
+
+
+async def remove_all_roles_of_users(
+    ss: SessionDep,
+    users: Sequence[orm.User],
+    commit: bool = True,
+) -> list[gene_sche.BulkOpeartionInfo]:
+    """
+    Remove all roles of a list of users
+    """
+    stmt = select(orm.AssociationUserRole).where(
+        orm.AssociationUserRole.user_id.in_([u.user_id for u in users])
+    )
+
+    assoc_user_role = (await ss.scalars(stmt)).all()
+
+    assoc_total = gene_sche.BulkOpeartionInfo(operation="Remove user-role associations")
+
+    for assoc in assoc_user_role:
+        assoc.delete()
+        assoc_total.inc()
+
+    if commit:
+        await try_commit(ss)
+
+    return [assoc_total]
+
+
+async def get_cascade_contact_info_from_users(
+    ss: SessionDep, users: Sequence[orm.User]
+):
+    """
+    Get all contact info of a list of user
+    """
+    user_id_list = [u.user_id for u in users]
+
+    stmt = (
+        select(orm.ContactInfo)
+        .select_from(orm.User)
+        .join(orm.User.contact_info.and_(orm.User.user_id.in_(user_id_list)))
+    )
+
+    return (await ss.scalars(stmt)).all()
+
+
+async def remove_users_cascade(
+    ss: SessionDep,
+    users: Sequence[orm.User],
+    constraint: bool = False,
+    commit: bool = True,
+) -> list[gene_sche.BulkOpeartionInfo]:
+    """
+    Cascade remove user from database
+
+    Cascade:
+
+    - Item
+    - Contact Info
+    - Trade (as buyer)
+    - Question (as asker)
+    - Association Fav
+    - Association Role
+
+    Constraint(Deprecated, do not use this parameter):
+
+    - The `constraint` provided by this function should not be used in production env.
+      Since this constraint just check if there is any foreign key constraint and does
+      not fit the actually business logic (For example, user with complete transaction
+      should be able to remove their account etc.)
+    """
+    # lazy import
+    from ..item.core import get_cascade_items_from_users, remove_items_cascade
+    from ..item.core import get_cascade_questions_from_askers, remove_questions
+    from ..trade.core import get_cascade_trade_from_buyers, remove_trades_cascade
+    from ..fav.core import remove_fav_items_cascade, get_cascade_fav_items_by_users
+
+    user_id_list = [u.user_id for u in users]
+
+    # remove items
+    items = await get_cascade_items_from_users(ss, users)
+    if constraint and len(items) > 0:
+        raise exc.CascadeConstraintError("Could not remove user with valid items")
+    item_total = await remove_items_cascade(ss, items, commit=False)
+
+    # remove contact info
+    contact_info_list = await get_cascade_contact_info_from_users(ss, users)
+    if constraint and len(contact_info_list) > 0:
+        raise exc.CascadeConstraintError(
+            "Could not remove user with valid contact info"
+        )
+    c_total = gene_sche.BulkOpeartionInfo(operation="Remove contact info")
+    for c in contact_info_list:
+        c.delete()
+        c_total.inc()
+
+    # remove trade
+    trades = await get_cascade_trade_from_buyers(ss, users)
+    if constraint and len(trades) > 0:
+        raise exc.CascadeConstraintError("Could not remove user with valid trades")
+    trade_total = await remove_trades_cascade(ss, trades, commit=False)
+
+    # remove question
+    questions = await get_cascade_questions_from_askers(ss, users)
+    if constraint and len(questions) > 0:
+        raise exc.CascadeConstraintError(
+            "Could not remove user with valid asked questions"
+        )
+    question_total = await remove_questions(ss, questions, commit=False)
+
+    # remove associations user-fav-item
+    assoc_fav_items = await get_cascade_fav_items_by_users(ss, users)
+    if constraint and len(assoc_fav_items) > 0:
+        raise exc.CascadeConstraintError(
+            "Could not remove user with valid associated fav items"
+        )
+    assoc_fav_items_total = await remove_fav_items_cascade(
+        ss, assoc_fav_items, commit=False
+    )
+
+    # remove associations user-role
+    assoc_user_role_total = await remove_all_roles_of_users(ss, users, commit=False)
+
+    # finally, remove user itself
+    user_total = gene_sche.BulkOpeartionInfo(operation="Remove users")
+    for u in users:
+        u.delete()
+        user_total.inc()
+
+    if commit:
+        await try_commit(ss)
+
+    remove_user_total: list[gene_sche.BulkOpeartionInfo] = (
+        [user_total]
+        + [c_total]
+        + item_total
+        + trade_total
+        + question_total
+        + assoc_fav_items_total
+        + assoc_user_role_total
+    )
+
+    return remove_user_total

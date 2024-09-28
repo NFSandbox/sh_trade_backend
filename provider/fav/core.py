@@ -17,7 +17,7 @@ from ..database import SessionDep, try_commit
 from exception import error as exc
 
 
-async def remove_fav_items(
+async def remove_fav_items_of_user(
     ss: SessionDep, user: orm.User, item_id_list: Sequence[int] | None
 ) -> gene_sche.BulkOpeartionInfo:
     """
@@ -56,11 +56,22 @@ async def get_cascade_fav_items_by_items(ss: SessionDep, items: Sequence[orm.Ite
     return (await ss.scalars(stmt)).all()
 
 
+async def get_cascade_fav_items_by_users(ss: SessionDep, users: Sequence[orm.User]):
+    """
+    Get fav items association of a list of users
+    """
+    stmt = select(orm.AssociationUserFavouriteItem).where(
+        orm.AssociationUserFavouriteItem.user_id.in_([u.user_id for u in users])
+    )
+
+    return (await ss.scalars(stmt)).all()
+
+
 async def remove_fav_items_cascade(
     ss: SessionDep,
     associations: Sequence[orm.AssociationUserFavouriteItem],
     commit: bool = True,
-) -> gene_sche.BulkOpeartionInfo:
+) -> list[gene_sche.BulkOpeartionInfo]:
     count = gene_sche.BulkOpeartionInfo(operation="Remove user-fav-item associations")
 
     for a in associations:
@@ -70,4 +81,4 @@ async def remove_fav_items_cascade(
     if commit:
         await try_commit(ss)
 
-    return count
+    return [count]

@@ -98,7 +98,9 @@ async def login_for_token(
             headers={"WWW-Authenticate": "Bearer"},
             detail=exc.BaseErrorOut.from_base_error(e).model_dump(),
         )
-    roles: list[str] = [role.role_name for role in user.roles]
+    roles: list[str] = await session.run_sync(
+        lambda x: [role.role_name for role in user.roles]
+    )
 
     # return generated token based on user info
     return auth_sche.TokenOut(
@@ -182,6 +184,9 @@ async def user_sign_up(
     resp: Response,
 ):
     try:
+        # check dupliate
+        await auth_provider.check_no_username_duplicate(ss, info.username)
+
         # create new user
         new_user = orm.User(
             username=info.username, password=passlib_context.hash(info.password)

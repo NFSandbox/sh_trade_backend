@@ -168,3 +168,6 @@ archive.zip
 
 # Microsoft doc files
 *.docx
+
+# vscode counter extensions
+/.VSCodeCounter

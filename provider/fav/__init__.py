@@ -1,5 +1,5 @@
 from .core import (
-    remove_fav_items,
+    remove_fav_items_of_user,
     get_cascade_fav_items_by_items,
     remove_fav_items_cascade,
 )

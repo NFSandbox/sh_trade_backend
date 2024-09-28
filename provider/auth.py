@@ -43,16 +43,10 @@ async def get_user_by_contact_info(
     Notes:
     - When used as dependency, the `login_info` is required in request Body.
     """
-    stmt_username = (
-        select(orm.User)
-        .options(selectinload(orm.User.roles))
-        .where(orm.User.username.__eq__(login_info))
-    )
+    stmt_username = select(orm.User).where(orm.User.username.__eq__(login_info))
     stmt_contact_info = (
         select(orm.ContactInfo)
-        .options(
-            selectinload(orm.ContactInfo.user).options(selectinload(orm.User.roles))
-        )
+        .options(selectinload(orm.ContactInfo.user))
         .where(orm.ContactInfo.contact_info == login_info)
         .where(orm.ContactInfo.deleted_at == None)
     )
@@ -76,3 +70,22 @@ async def get_user_by_contact_info(
 
     # success
     return user
+
+
+async def check_no_username_duplicate(ss: SessionDep, username: str):
+    """
+    Check if username already exists in database
+
+    Return None if check pass, else raise.
+    """
+    stmt = (
+        select(func.count()).select_from(orm.User).where(orm.User.username == username)
+    )
+
+    res = (await ss.scalars(stmt)).one()
+
+    if res > 0:
+        raise exc.DuplicatedError(
+            name="username_already_exists",
+            message="The choosed username already used by others, please change username and try again",
+        )

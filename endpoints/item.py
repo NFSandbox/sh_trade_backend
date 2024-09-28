@@ -142,7 +142,7 @@ async def remove_items(ss: SessionDep, user: CurrentUserDep, item_id_list: list[
     # permission check, user could only delete items of themselves
     for item in items:
         # admin, skip permission check
-        if await user.verify_role(["admin"]):
+        if await user.verify_role(ss, ["admin"]):
             break
         if item.user_id != user.user_id:
             raise exc.PermissionError(
@@ -172,6 +172,11 @@ async def add_question(
 ):
     """
     Add a question to an item
+
+    Note:
+
+    - Do not pass `asker_id` field, it will be automatically set to the `user_id`
+      of current user.
     """
     # if contains answer part, check permission
     if question.answer is not None:
@@ -262,7 +267,7 @@ async def answer_question(
 )
 async def delete_question(ss: SessionDep, user: CurrentUserDep, question_id: int):
     # only related user could delete the question
-    if not await user.verify_role(["admin"]):
+    if not await user.verify_role(ss, ["admin"]):
         await item_provider.check_question_belongs_to_user(
             ss, question_id, user.user_id
         )

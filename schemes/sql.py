@@ -16,6 +16,7 @@ from sqlalchemy.orm import (
     MappedAsDataclass,
 )
 from sqlalchemy.sql.type_api import TypeEngine
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # sqlalchemy association proxy extensions
 from sqlalchemy.ext.associationproxy import association_proxy
@@ -97,12 +98,20 @@ class PaginationConfig(BaseModel):
         return select_stmt.limit(limit).offset(offset)
 
 
-user_role_association_table = Table(
-    "association_users_roles",
-    SQLBaseModel.metadata,
-    Column("user_id", ForeignKey("user.user_id"), primary_key=True),
-    Column("role_id", ForeignKey("role.role_id"), primary_key=True),
-)
+class AssociationUserRole(SQLBaseModel):
+    __tablename__ = "association_users_roles"
+
+    association_users_roles_id: Mapped[IntPrimaryKey] = mapped_column(
+        autoincrement=True
+    )
+
+    user_id: Mapped[IntPrimaryKey] = mapped_column(ForeignKey("user.user_id"))
+    role_id: Mapped[IntPrimaryKey] = mapped_column(ForeignKey("role.role_id"))
+
+    created_time: Mapped[TimeStamp]
+
+    user: Mapped["User"] = relationship(back_populates="association_roles")
+    role: Mapped["Role"] = relationship(back_populates="association_users")
 
 
 class User(SQLBaseModel):
@@ -111,7 +120,7 @@ class User(SQLBaseModel):
     user_id: Mapped[IntPrimaryKey]
 
     campus_id: Mapped[NormalString | None]
-    username: Mapped[NormalString] = mapped_column(unique=True)
+    username: Mapped[NormalString]
     password: Mapped[LongString] = mapped_column()
     description: Mapped[LongString] = mapped_column(nullable=True)
     created_time: Mapped[TimeStamp]
@@ -120,11 +129,17 @@ class User(SQLBaseModel):
         back_populates="buyer", foreign_keys="TradeRecord.buyer_id"
     )
     contact_info: Mapped[List["ContactInfo"]] = relationship(back_populates="user")
-    roles: Mapped[List["Role"]] = relationship(
-        secondary=user_role_association_table,
-        back_populates="users",
-    )
     items: Mapped[List["Item"]] = relationship(back_populates="seller")
+
+    # user-role associations
+    association_roles: Mapped[List["AssociationUserRole"]] = relationship(
+        back_populates="user",
+    )
+    roles: AssociationProxy[List["Role"]] = association_proxy(
+        "association_roles",
+        "role",
+        creator=lambda role_orm: AssociationUserRole(role=role_orm),
+    )
 
     # relation about fav items
     association_fav_items: Mapped[List["AssociationUserFavouriteItem"]] = relationship(
@@ -136,7 +151,7 @@ class User(SQLBaseModel):
         creator=lambda item_orm: AssociationUserFavouriteItem(item=item_orm),
     )
 
-    async def verify_role(self, roles: str | list[str]) -> bool:
+    async def verify_role(self, ss: AsyncSession, roles: str | list[str]) -> bool:
         """Check if this user has some roles
 
         Args:
@@ -154,16 +169,18 @@ class User(SQLBaseModel):
         since the `roles` relationship info is retrieved using *Awaitable Attributes*.
         """
         # get user roles
-        roles_of_this_user: list[Role] = await self.awaitable_attrs.roles
-        logger.debug(f"User: {self}, roles: {roles_of_this_user}, required: {roles}")
+        roles_of_this_user: list[Role] = await ss.run_sync(lambda ss: self.roles)
 
-        # iterate through user's roles.
-        # once one of the user role is in the allowed role list, pass the test
-        for user_role in roles_of_this_user:
-            if user_role.role_name in roles:
-                return True
+        def _check_user_has_allowed_roles(ss):
+            # iterate through user's roles.
+            # once one of the user role is in the allowed role list, pass the test
+            for user_role in roles_of_this_user:
+                if user_role.role_name in roles:
+                    return True
 
-        return False
+            return False
+
+        return await ss.run_sync(lambda ss: _check_user_has_allowed_roles(ss))
 
 
 class ContactInfoType(Enum):
@@ -283,7 +300,7 @@ class Question(SQLBaseModel):
 
     question: Mapped[VeryLongString]
     created_time: Mapped[TimeStamp] = mapped_column(default=get_current_timestamp_ms)
-    answered_time: Mapped[TimeStamp] = mapped_column(nullable=True)
+    answered_time: Mapped[NullableTimeStamp]
     answer: Mapped[VeryLongString] = mapped_column(nullable=True)
     public: Mapped[bool] = mapped_column(default=False)
 
@@ -366,6 +383,12 @@ class Role(SQLBaseModel):
     role_name: Mapped[NormalString]
     role_title: Mapped[NormalString]
 
-    users: Mapped[List["User"]] = relationship(
-        secondary=user_role_association_table, back_populates="roles"
+    # user-role associations
+    association_users: Mapped[List["AssociationUserRole"]] = relationship(
+        back_populates="role"
+    )
+    user: AssociationProxy[List["User"]] = association_proxy(
+        "association_users",
+        "user",
+        creator=lambda user_orm: AssociationUserRole(user=user_orm),
     )

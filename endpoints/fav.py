@@ -63,7 +63,7 @@ async def remove_favourite_items(
     """
     Remove an item from favourite by list of `item_id`, return `BulkOpeartionInfo`
     """
-    return await fav_provider.remove_fav_items(ss, user, item_id_list)
+    return await fav_provider.remove_fav_items_of_user(ss, user, item_id_list)
 
 
 @fav_router.delete("/remove_all", response_model=gene_sche.BulkOpeartionInfo)
@@ -71,7 +71,7 @@ async def remove_all_favourite_items(ss: SessionDep, user: CurrentUserDep):
     """
     Remove all fav items from user, return `BulkOpeartionInfo`
     """
-    return await fav_provider.remove_fav_items(ss, user, item_id_list=None)
+    return await fav_provider.remove_fav_items_of_user(ss, user, item_id_list=None)
 
 
 # todo
