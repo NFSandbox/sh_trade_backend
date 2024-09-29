@@ -43,6 +43,8 @@ async def start_transaction(
     Raises
 
     - `processing_transaction_exists` (409)
+    - `duplicated_transaction` (409)
+    - `identical_seller_buyer` (409)
     - `invalid_item` (404)
     - `no_valid_contact_info` (404)
     - `processing_transaction_limit_exceeded` (400)
@@ -65,6 +67,35 @@ async def start_transaction(
 
 class GetTransactionsFilters(BaseModel):
     states: list[gene_sche.TradesFilterTypeIn]
+
+
+@trade_router.get(
+    "/accept",
+    response_model=db_sche.TradeRecordOut,
+    response_model_exclude_none=True,
+)
+async def accept_transaction(ss: SessionDep, user: CurrentUserDep, trade_id: int):
+    """
+    Accept a transaction, updating it's state to `processing`, return the info
+    of the accepted trade.
+
+    Raises
+
+    - `not_seller` (406)
+    - `transaction_not_pending` (406)
+    - `processing_transaction_exists` (409)
+    - `invalid_item` (404)
+    """
+    # get trade
+    trade = await trade_provider.get_trade_by_id(ss, trade_id)
+
+    # validity check
+    await trade_provider.check_validity_to_accept_transaction(ss, user, trade)
+
+    # accept
+    trade = await trade_provider.accpet_transaction(ss, trade)
+
+    return await ss.run_sync(lambda ss: db_sche.TradeRecordOut.model_validate(trade))
 
 
 @trade_router.get(
@@ -108,3 +139,30 @@ async def get_transactions(
         return out_list
 
     return await ss.run_sync(to_pydantic_transactions)
+
+
+@trade_router.post(
+    "/cancel",
+    response_model=db_sche.TradeRecordOut,
+    response_model_exclude_none=True,
+)
+async def cancel_transaction(
+    ss: SessionDep,
+    user: CurrentUserDep,
+    trade_id: Annotated[int, Body(embed=True)],
+):
+    """
+    Cancel an active transaction or reject a pending transaction
+    """
+    # get transaction
+    trade = await trade_provider.get_trade_by_id(ss, trade_id)
+
+    # check validity
+    cancel_reason = await trade_provider.determine_cancel_reason(ss, user, trade)
+
+    # cancel transaction
+    await trade_provider.cancel_transaction(
+        ss, user, trade, cancel_reason=cancel_reason
+    )
+
+    return await ss.run_sync(lambda ss: db_sche.TradeRecordOut.model_validate(trade))

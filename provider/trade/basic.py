@@ -72,11 +72,16 @@ async def check_no_existing_processing_transaction(
     """
     Check if the buyer already have a pending transaction with the item
 
-    Use case
+    Checks
 
     - Buyer may already start a transaction with this item, and the transaction
       is waiting for seller's acceptance.
-    - Buyer may already have a _processing_ transaction with thie item.
+    - Buyer may already have a _processing_ transaction with this item.
+
+    Note
+
+    This function will not check if the item has any other processing transactions.
+    For that purpose, use `check_item_validity_to_start_transaction()`
 
     Raises
 
@@ -186,6 +191,66 @@ async def check_user_validity_to_start_transaction(ss: SessionDep, user: orm.Use
     return True
 
 
+async def check_validity_to_accept_transaction(
+    ss: SessionDep, user: orm.User, trade: orm.TradeRecord
+):
+    """
+    Check if a user could accept a transaction
+
+    Checks
+
+    - User is the seller of the item of the transaction
+    - Item validity to start transaction
+    - Transaction is in pending state
+
+    Raises
+
+    - `not_seller` (406)
+    - `transaction_not_pending` (406)
+    - `processing_transaction_exists` (409)
+    - `invalid_item` (404)
+    """
+    # ensure user is the seller
+    seller_id = await ss.run_sync(lambda ss: trade.item.seller.user_id)
+    if user.user_id != seller_id:
+        raise exc.IllegalOperationError(
+            name="not_seller",
+            message="Only the seller of the item could accept the transaction",
+        )
+
+    # item validity
+    await check_item_validity_to_start_transaction(
+        ss, await ss.run_sync(lambda ss: trade.item)
+    )
+
+    # ensure transaction in pending state
+    if trade.state != orm.TradeState.pending:
+        raise exc.IllegalOperationError(
+            name="transaction_not_pending",
+            message="Only transactions in holding state could be accepted",
+        )
+
+
+async def accpet_transaction(ss: SessionDep, trade: orm.TradeRecord):
+    """
+    Accept a transaction, change its state to `processing`
+    """
+    # ensure transaction in pending state
+    if trade.state != orm.TradeState.pending:
+        raise exc.IllegalOperationError(
+            name="transaction_not_pending",
+            message="Only transactions in pending state could be accepted",
+        )
+
+    # update state and accept time
+    trade.state = orm.TradeState.processing
+    trade.accepted_time = orm.get_current_timestamp_ms()
+
+    await try_commit(ss)
+
+    return trade
+
+
 async def start_transaction(
     ss: SessionDep, user: orm.User, item: orm.Item, skip_check: bool = False
 ):
@@ -242,7 +307,19 @@ async def get_transactions(
     - `states` Filter result using the list of state. If `None`, no filter will be applied.
     """
     # get all transaction of a certain user with certain states
-    stmt = select(orm.TradeRecord).where(orm.TradeRecord.buyer_id == user.user_id)
+    stmt = (
+        select(orm.TradeRecord)
+        .join(orm.TradeRecord.item)
+        .join(orm.Item.seller)
+        .where(
+            or_(
+                # this user is buyer
+                orm.TradeRecord.buyer_id == user.user_id,
+                # this user is seller
+                orm.User.user_id == user.user_id,
+            )
+        )
+    )
 
     # apply filters if exists
     if states is not None:
@@ -305,6 +382,9 @@ async def determine_cancel_reason(
 
     if trade.state == orm.TradeState.pending and user_is_seller:
         return orm.TradeCancelReason.seller_rejected
+
+    if trade.state == orm.TradeState.pending and user_is_buyer:
+        return orm.TradeCancelReason.cancelled_by_buyer
 
     if trade.state == orm.TradeState.processing:
         if user_is_seller:

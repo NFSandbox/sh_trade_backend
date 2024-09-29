@@ -102,12 +102,12 @@ class TradeRecordOut(BaseModel):
     item: ItemOut
 
     created_time: int
-    accepted_time: int | None
-    confirmed_time: int | None
-    completed_time: int | None
+    accepted_time: int | None = None
+    confirmed_time: int | None = None
+    completed_time: int | None = None
 
     state: orm.TradeState
-    cancel_reason: orm.TradeCancelReason | None
+    cancel_reason: orm.TradeCancelReason | None = None
 
     class Config:
         from_attributes = True
