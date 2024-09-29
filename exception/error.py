@@ -254,3 +254,17 @@ class ConflictError(BaseError):
         status: int = httpstatus.HTTP_409_CONFLICT,
     ) -> None:
         super().__init__(name, message, status)
+
+
+class IllegalOperationError(BaseError):
+    """
+    Raise when user's request is illegal (HTTP_406)
+    """
+
+    def __init__(
+        self,
+        name: str = "illegal_operation",
+        message: str = "This operation is not allowed for current user or in current situation",
+        status: int = httpstatus.HTTP_406_NOT_ACCEPTABLE,
+    ) -> None:
+        super().__init__(name, message, status)

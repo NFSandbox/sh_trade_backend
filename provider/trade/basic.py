@@ -232,21 +232,127 @@ async def start_transaction(
 async def get_transactions(
     ss: SessionDep,
     user: orm.User,
-    states: Sequence[orm.TradeState],
+    states: Sequence[orm.TradeState] | None,
 ):
     """
     Get related transactions of a user
-    """
-    # todo
 
+    Args
+
+    - `states` Filter result using the list of state. If `None`, no filter will be applied.
+    """
     # get all transaction of a certain user with certain states
-    stmt = select(orm.TradeRecord).where(
-        and_(
-            orm.TradeRecord.buyer_id == user.user_id,
-            orm.TradeRecord.state.in_(states),
-        )
-    )
+    stmt = select(orm.TradeRecord).where(orm.TradeRecord.buyer_id == user.user_id)
+
+    # apply filters if exists
+    if states is not None:
+        stmt = stmt.where(orm.TradeRecord.state.in_(states))
 
     trade_list = (await ss.scalars(stmt)).all()
 
     return trade_list
+
+
+async def determine_cancel_reason(
+    ss: SessionDep,
+    user: orm.User,
+    trade: orm.TradeRecord,
+    raise_if_uncancellable: bool = False,
+) -> orm.TradeCancelReason:
+    """
+    Determine the cancel reason based on `user` and `trade` info.
+
+    Return `orm.TradeCancelReason` if success, else raise `RuntimeError`
+
+    This function could also be used for cancellation valitity checking,
+    for more info, check out `raise_if_uncancellable` parameter.
+
+    Args
+
+    - `raise_if_uncancellable` If `True`, will raise if this cancellation is
+      not allowed.
+
+    Possible Reasons
+
+    - `seller_rejected` In pending state, user is seller.
+    - `cancelled_by_buyer` In processing state, user is buyer.
+    - `cancelled_by_seller` In processing state, user is seller.
+
+    Reason Determination Process:
+
+    - If an explicit not None `cancel_reason` received, use it
+    - Else, try auto-determine reason based on received `user`, and use it if
+      successfully auto-determined
+    - Else, set cancel reason to `None`
+
+    Raises
+
+    - `RuntimeError` Could not determine cancel reason
+    - `IllegalOperationError` If `raise_if_uncancellable` is `True` and
+      cancellation is not allowed
+    """
+    # first determine if user is seller / buyer
+    seller = await ss.run_sync(lambda ss: trade.item.seller)
+    user_is_seller = user.user_id == seller.user_id
+    user_is_buyer = trade.buyer_id == user.user_id
+
+    # cancellation validity check if necessary
+    if raise_if_uncancellable and trade.confirmed_time is not None:
+        raise exc.IllegalOperationError(
+            name="could_not_cancel_confirmed_transaction",
+            message="Transaction confirmed by seller could not be cancelled",
+        )
+
+    if trade.state == orm.TradeState.pending and user_is_seller:
+        return orm.TradeCancelReason.seller_rejected
+
+    if trade.state == orm.TradeState.processing:
+        if user_is_seller:
+            return orm.TradeCancelReason.cancelled_by_seller
+        if user_is_buyer:
+            return orm.TradeCancelReason.cancelled_by_buyer
+
+    raise RuntimeError(
+        "Could not auto-determine cancel reason: "
+        f"User with user_id: {user.user_id}, item with item_id: {trade.item_id}"
+    )
+
+
+async def cancel_transaction(
+    ss: SessionDep,
+    user: orm.User,
+    trade: orm.TradeRecord,
+    cancel_reason: orm.TradeCancelReason | None = None,
+    commit: bool = True,
+):
+    """
+    Cancel a `transaction` on behalf of `user`
+
+    Note:
+    - The `user` args is not used for any validity check, it should only be
+      used to auto-generate Cancel Reason.
+
+    In normal cases, it's enough to pass `user` args and let this function
+    auto-determine the reason
+    """
+    # try auto-determine cancel reason if not specify
+    if cancel_reason is None:
+        try:
+            cancel_reason = await determine_cancel_reason(ss, user, trade, False)
+        except RuntimeError:
+            pass
+
+    # update trade states
+    trade.state = orm.TradeState.cancelled
+    # update cancel reason if exists
+    if cancel_reason is not None:
+        trade.cancel_reason = cancel_reason
+
+    # commit and return
+    if commit:
+        await try_commit(ss)
+
+    # todo
+    # add endpoints function that exploit this function
+    # testing
+    return trade

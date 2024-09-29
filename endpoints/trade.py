@@ -1,9 +1,9 @@
 import time
-from typing import Annotated, cast, List
+from typing import Annotated, cast, List, Collection
 
 from loguru import logger
 from fastapi import APIRouter, Query, Depends, Request, Response, status, Body
-
+from pydantic import BaseModel
 from config import system as sys_config
 
 from schemes import db as db_sche
@@ -61,3 +61,50 @@ async def start_transaction(
     return await ss.run_sync(
         lambda _: db_sche.TradeRecordOut.model_validate(new_transaction)
     )
+
+
+class GetTransactionsFilters(BaseModel):
+    states: list[gene_sche.TradesFilterTypeIn]
+
+
+@trade_router.get(
+    "/get",
+    response_model=list[db_sche.TradeRecordOut],
+    response_model_exclude_none=True,
+)
+async def get_transactions(
+    ss: SessionDep,
+    user: CurrentUserDep,
+    pagination: gene_sche.PaginationConfig | None = None,
+    filters: GetTransactionsFilters | None = None,
+):
+    """
+    Get transactions related to current user
+
+    Args
+
+    - `filter` If none, return all transactions related to current user.
+      Else, only return the transactions satisfy the states that `filter`
+      refers to. For more info, check out `TradesFilterTypeIn` model.
+
+    E.g.:
+
+    If passed `filter=["processing", "cancelled"]`, then only transactions
+    with this two type will be returned. You could also use `"active"` and
+    `"inactive"` specifier specially with this endpoint parameters.
+    """
+    # convert filter type to orm type
+    if filters is None:
+        allowed_states = None
+    else:
+        allowed_states = gene_sche.TradesFilterTypeIn.bulk_to_trade_states(
+            filters.states
+        )
+
+    transactions = await trade_provider.get_transactions(ss, user, allowed_states)
+
+    def to_pydantic_transactions(ss):
+        out_list = [db_sche.TradeRecordOut.model_validate(t) for t in transactions]
+        return out_list
+
+    return await ss.run_sync(to_pydantic_transactions)

@@ -3,6 +3,7 @@ Declare models uses as util data structures in API I/O
 """
 
 from enum import Enum
+from typing import Collection
 from pydantic import BaseModel, NonNegativeInt
 
 from sqlalchemy.sql import Select
@@ -28,7 +29,7 @@ class BulkOpeartionInfo(BaseModel):
         self.total += delta
 
 
-class TradesFilterTypeIn(Enum):
+class TradesFilterTypeIn(str, Enum):
     """
     Model used to specify the filter condition for trades
     """
@@ -67,7 +68,7 @@ class TradesFilterTypeIn(Enum):
 
     @classmethod
     def bulk_to_trade_states(
-        cls, filters: list["TradesFilterTypeIn"]
+        cls, filters: Collection["TradesFilterTypeIn"]
     ) -> list[TradeState]:
         """
         Convert a list of `TradesFilterTypeIn` to a list of `TradeState`

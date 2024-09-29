@@ -131,18 +131,22 @@ async def update_tags_of_item(
     remove_prev: bool = True,
 ) -> orm.Item:
     """
-    Update tags of an item, and return the updated item
+    Update tags of an item, and return the updated item. Empty tags will be ignored
 
     Args
 
     - `remove_prev` Remove all previous tags of item. `item` must be already in database
 
-    Note
+    Note:
 
-    - All previous tags will be removed
+    - All tags string will be performed `.strip()`
+    - Empty string tags will be ignored.
     """
     # remove tags duplication,
     tag_str_list = list(set(tag_str_list))
+
+    # remove empty tags, strip operation
+    tag_str_list = [t.strip() for t in tag_str_list if t != ""]
 
     # get tag orm instance list to be added
     tag_orm_list = await add_tags_if_not_exists(ss, tag_str_list)
@@ -451,7 +455,7 @@ async def get_tags_by_names(
 async def add_tags_if_not_exists(ss: SessionDep, tag_str_list: Sequence[str]):
     """
     Create new tags based on a list of tag name str if the tag with the name
-    not exists
+    not exists. Empty string tags will be ignored
 
     Returns
 
@@ -465,8 +469,14 @@ async def add_tags_if_not_exists(ss: SessionDep, tag_str_list: Sequence[str]):
 
     # add if not exists
     for tag in tag_str_list:
+        # tag exists
         if tag in exists_tags_str:
             continue
+        # tag is empty
+        if tag == "":
+            continue
+
+        # add tag
         logger.debug(f"Adding tag with name: {tag}")
         new_tag = orm.Tag(name=tag)
         ss.add(new_tag)
