@@ -78,9 +78,9 @@ async def async_main(y: bool = False, no_drop: bool = False, h: bool = False):
     if h:
         logger.info(
             "Usage of create_db.py"
-            "\n-y Confirm action."
-            "\n--no-drop Do not drop previous table when creating new one"
-            "\n-h Show help text"
+            "\n-h           Show help text"
+            "\n-y           Confirm action, compulsory when execute without --no-drop"
+            "\n--no-drop    Do not drop previous table when exists"
         )
         return
 
@@ -89,7 +89,7 @@ async def async_main(y: bool = False, no_drop: bool = False, h: bool = False):
     else:
         logger.warning(
             "Executing this script will drop all previous data in the database, "
-            "which may lead to unreversible data loss. "
+            "which may lead to inreversible data loss. "
         )
 
         if not y:

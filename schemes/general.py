@@ -3,8 +3,8 @@ Declare models uses as util data structures in API I/O
 """
 
 from enum import Enum
-from typing import Collection
-from pydantic import BaseModel, NonNegativeInt
+from typing import Collection, Annotated
+from pydantic import BaseModel, NonNegativeInt, PositiveInt
 
 from sqlalchemy.sql import Select
 
@@ -87,7 +87,14 @@ class TradesFilterTypeIn(str, Enum):
 
 class PaginationConfig(BaseModel):
     """
-    Pagination tool class that used to add pagination to select statement:
+    Pagination tool class that used to add pagination to select statement
+
+    Fields
+
+    - `size` Specify how many rows in a page
+    - `index` Specify the page number, zero-indexed
+
+    Usages
 
         stmt : Select
         pagi_conf = PaginationConfig(size=..., limit=...)
@@ -102,12 +109,22 @@ class PaginationConfig(BaseModel):
     """
 
     # how many rows contains in a page
-    size: int = 20
+    size: Annotated[int, PositiveInt] = 20
 
     # zero-index page number
-    index: int
+    index: Annotated[int, NonNegativeInt] = 0
 
     def use_on(self, select_stmt: Select):
+        """
+        Apply this pagination config to a statement object, then return a new select
+
+        Usages:
+
+            stmt: Select
+            config: PaginationConfig
+            stmt = config.use_on(stmt)
+        
+        """
         offset = self.size * self.index
         limit = self.size
         return select_stmt.limit(limit).offset(offset)

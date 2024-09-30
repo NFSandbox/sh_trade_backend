@@ -7,6 +7,7 @@ from .basic import (
     add_item,
     update_item,
     check_item_belong_to_user,
+    check_validity_to_update_item,
     get_questions_by_item_id,
     get_question_by_id,
     check_question_belongs_to_user,

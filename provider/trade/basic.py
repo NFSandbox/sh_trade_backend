@@ -11,6 +11,7 @@ from config import system as sys_conf
 from schemes import sql as orm
 from schemes import auth as auth_sche
 from schemes import db as db_sche
+from schemes import general as gene_sche
 
 from ..database import init_session_maker, session_maker, SessionDep, try_commit
 from ..user.core import get_user_contact_info_count
@@ -298,9 +299,12 @@ async def get_transactions(
     ss: SessionDep,
     user: orm.User,
     states: Sequence[orm.TradeState] | None,
+    pagination: gene_sche.PaginationConfig | None = None,
 ):
     """
-    Get related transactions of a user
+    Get related transactions of a user.
+
+    Note that this will get transaction both with this user as buyer and seller.
 
     Args
 
@@ -324,6 +328,10 @@ async def get_transactions(
     # apply filters if exists
     if states is not None:
         stmt = stmt.where(orm.TradeRecord.state.in_(states))
+
+    # apply pagination config if exists
+    if pagination is not None:
+        stmt = pagination.use_on(stmt)
 
     trade_list = (await ss.scalars(stmt)).all()
 
@@ -435,4 +443,95 @@ async def cancel_transaction(
     # todo
     # add endpoints function that exploit this function
     # testing
+    return trade
+
+
+async def complete_transaction(
+    ss: SessionDep,
+    trade: orm.TradeRecord,
+    commit: bool = True,
+) -> orm.TradeRecord:
+    """
+    Mark a transaction is complete:
+
+    - Update transaction `state`
+    - Update `completed_time`
+    - Update item state as `sold`
+
+    Will check the transaction is currently in `processing` state
+
+    Usages
+
+    This function should not be directly called by endpoint functions.
+    Instead, only call this function inside `confirm_transaction()`
+    after buyer perform the confirm operation.
+
+    For more info about the design, check out
+    [Transaction System Spec](https://github.com/NFSandbox/sh_trade_backend/wiki/Transaction-System-Specification).
+
+    Raises
+
+    - `trade_not_processing`
+    """
+    # transaction state check
+    if trade.state != orm.TradeState.processing:
+        raise exc.IllegalOperationError(
+            name="trade_not_processing",
+            message="Only transactions in processing state could be marked completed",
+        )
+
+    # update transaction
+    trade.completed_time = orm.get_current_timestamp_ms()
+    trade.state = orm.TradeState.success
+
+    # update item
+    item = await ss.run_sync(lambda ss: trade.item)
+    item.state = orm.ItemState.sold
+
+    if commit:
+        await try_commit(ss)
+
+    return trade
+
+
+async def confirm_transaction(
+    ss: SessionDep,
+    user: orm.User,
+    trade: orm.TradeRecord,
+    commit: bool = True,
+) -> orm.TradeRecord:
+    """
+    Perform transaction confirmation on behalf of `user`, return the updated transaction
+
+    Raises
+
+    - `not_seller_or_buyer`
+    - `trade_not_processing`
+    """
+    # first check if this user is seller or buyer
+    seller = await ss.run_sync(lambda ss: trade.item.seller)
+    user_is_seller = user.user_id == seller.user_id
+    user_is_buyer = trade.buyer_id == user.user_id
+
+    # if not seller and not buyer
+    if not user_is_seller and not user_is_buyer:
+        raise exc.IllegalOperationError(
+            name="not_seller_or_buyer",
+            message="Only the seller or buyer of the transaction could perform confirm opration",
+        )
+
+    # upate confirmed time if None
+    # - This is seller confirming a transaction
+    # - This is buyer confirming a transaction, and seller didn't confirmed at this point
+    if trade.confirmed_time is None:
+        trade.confirmed_time = orm.get_current_timestamp_ms()
+
+    # buyer confirmed, complete the transaction
+    if user_is_buyer:
+        await complete_transaction(ss, trade, commit=False)
+
+    # commit
+    if commit:
+        await try_commit(ss)
+
     return trade

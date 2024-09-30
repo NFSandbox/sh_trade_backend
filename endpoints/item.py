@@ -102,8 +102,20 @@ async def add_item(
     responses=exc.openApiErrorMark({403: "Item No Belong To User"}),
 )
 async def update_item(ss: SessionDep, user: CurrentUserDep, info: db_sche.ItemInWithId):
-    # permision check: only own of the item could update info
-    await item_provider.check_item_belong_to_user(ss, info.item_id, user.user_id)
+    """
+    Update info of an item
+
+    Raises
+
+    - `item_not_belongs_to_user`
+    - `invalid_item_state`
+    - `has_processing_transaction`
+    """
+    # get item by id
+    item = await item_provider.get_item_by_id(ss, item_id=info.item_id)
+
+    # validity check
+    await item_provider.check_validity_to_update_item(ss, user, item)
 
     # update item
     item_orm = await item_provider.update_item(ss, info)

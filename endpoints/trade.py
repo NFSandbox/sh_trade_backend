@@ -110,7 +110,10 @@ async def get_transactions(
     filters: GetTransactionsFilters | None = None,
 ):
     """
-    Get transactions related to current user
+    Get transactions related to current user.
+
+    This endpoint will return the transaction related to this user, both with
+    this user as the seller or buyer of the transaction.
 
     Args
 
@@ -164,5 +167,31 @@ async def cancel_transaction(
     await trade_provider.cancel_transaction(
         ss, user, trade, cancel_reason=cancel_reason
     )
+
+    return await ss.run_sync(lambda ss: db_sche.TradeRecordOut.model_validate(trade))
+
+
+@trade_router.get(
+    "/confirm",
+    response_model=db_sche.TradeRecordOut,
+    response_model_exclude_none=True,
+)
+async def confirm_transaction(ss: SessionDep, user: CurrentUserDep, trade_id: int):
+    """
+    Perform confirmation upon a transaction
+
+    Both seller and buyer could confirm the transaction. For more info,
+    check out [Transaction System Design](https://github.com/NFSandbox/sh_trade_backend/wiki/Transaction-Design)
+
+    Raises
+
+    - `not_seller_or_buyer`
+    - `trade_not_processing`
+    """
+    # get trade by id
+    trade = await trade_provider.get_trade_by_id(ss, trade_id)
+
+    # confirm
+    trade = await trade_provider.confirm_transaction(ss, user, trade)
 
     return await ss.run_sync(lambda ss: db_sche.TradeRecordOut.model_validate(trade))

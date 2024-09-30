@@ -176,7 +176,7 @@ class ContactInfo(SQLBaseModel):
     user: Mapped["User"] = relationship(back_populates="contact_info")
 
 
-class ItemState(Enum):
+class ItemState(str, Enum):
     hide = "hide"
     sold = "sold"
     valid = "valid"
