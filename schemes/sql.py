@@ -1,3 +1,7 @@
+"""
+Declare all SQLAlchemy ORM classes, relationships and associations.
+"""
+
 from datetime import datetime, UTC
 from enum import Enum
 from typing import Annotated, List, Set, cast
@@ -68,34 +72,6 @@ VeryLongString = Annotated[str, mapped_column(String(500))]
 ParagraphString = Annotated[str, mapped_column(String(2000))]
 TimeStamp = Annotated[int, mapped_column(default=get_current_timestamp_ms)]
 NullableTimeStamp = Annotated[int, mapped_column(nullable=True, default=None)]
-
-
-class PaginationConfig(BaseModel):
-    """
-    Pagination tool class that used to add pagination to select statement::
-
-        stmt : Select
-        pagi_conf = PaginationConfig(size=..., limit=...)
-        pagi_conf.use_on(stmt)
-
-    Also since this class is extend from `pydantic.BaseModel`, so it can be used as a dependency of
-    FastAPI method:
-
-        @fastApiRouter.get('/test')
-        def test_endpoint(pagi_conf : PaginationConfig):
-            pass
-    """
-
-    # how many rows contains in a page
-    size: int = 20
-
-    # zero-index page number
-    index: int
-
-    def use_on(self, select_stmt: Select):
-        offset = self.size * self.index
-        limit = self.size
-        return select_stmt.limit(limit).offset(offset)
 
 
 class AssociationUserRole(SQLBaseModel):
@@ -200,7 +176,7 @@ class ContactInfo(SQLBaseModel):
     user: Mapped["User"] = relationship(back_populates="contact_info")
 
 
-class ItemState(Enum):
+class ItemState(str, Enum):
     hide = "hide"
     sold = "sold"
     valid = "valid"

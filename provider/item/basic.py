@@ -131,18 +131,22 @@ async def update_tags_of_item(
     remove_prev: bool = True,
 ) -> orm.Item:
     """
-    Update tags of an item, and return the updated item
+    Update tags of an item, and return the updated item. Empty tags will be ignored
 
     Args
 
     - `remove_prev` Remove all previous tags of item. `item` must be already in database
 
-    Note
+    Note:
 
-    - All previous tags will be removed
+    - All tags string will be performed `.strip()`
+    - Empty string tags will be ignored.
     """
     # remove tags duplication,
     tag_str_list = list(set(tag_str_list))
+
+    # remove empty tags, strip operation
+    tag_str_list = [t.strip() for t in tag_str_list if t != ""]
 
     # get tag orm instance list to be added
     tag_orm_list = await add_tags_if_not_exists(ss, tag_str_list)
@@ -259,7 +263,7 @@ async def check_item_belong_to_user(ss: SessionDep, item_id: int, user_id: int):
 
     Raises
 
-    - `item_belonging_test_failed` 403
+    - `item_not_belongs_to_user`
     """
     # promise this is valid user
     await get_user_from_user_id(ss, user_id)
@@ -276,7 +280,45 @@ async def check_item_belong_to_user(ss: SessionDep, item_id: int, user_id: int):
         return res
     except:
         raise exc.PermissionError(
+            name="item_not_belongs_to_user",
             message=f"Item with id: {item_id} does not belongs to user with id: {user_id}",
+        )
+
+
+async def check_validity_to_update_item(ss: SessionDep, user: orm.User, item: orm.Item):
+    """
+    Check validity before updating item info by providing `user` and `item`
+
+    Used as general entry validity checking function.
+
+    Raises
+
+    - `item_not_belongs_to_user`
+    - `invalid_item_state`
+    - `has_processing_transaction`
+    """
+    # allowed state
+    allowed_states: Sequence[orm.ItemState] = [orm.ItemState.hide, orm.ItemState.valid]
+
+    # check item belongs to user
+    await check_item_belong_to_user(ss, item.item_id, user.user_id)
+
+    # check item in valid states for update
+    if item.state not in allowed_states:
+        allowed_state_string = ", ".join(allowed_states)
+
+        raise exc.IllegalOperationError(
+            name="invalid_item_state",
+            message=f"Item not in valid state for update operation. "
+            f"Allowed item states: {allowed_state_string}",
+        )
+
+    # check item has no processing transaction
+    trade = await ss.run_sync(lambda ss: item.processing_trade)
+    if trade is not None:
+        raise exc.IllegalOperationError(
+            name="has_processing_transaction",
+            message="Could not update an item with processing transaction",
         )
 
 
@@ -451,7 +493,7 @@ async def get_tags_by_names(
 async def add_tags_if_not_exists(ss: SessionDep, tag_str_list: Sequence[str]):
     """
     Create new tags based on a list of tag name str if the tag with the name
-    not exists
+    not exists. Empty string tags will be ignored
 
     Returns
 
@@ -465,8 +507,14 @@ async def add_tags_if_not_exists(ss: SessionDep, tag_str_list: Sequence[str]):
 
     # add if not exists
     for tag in tag_str_list:
+        # tag exists
         if tag in exists_tags_str:
             continue
+        # tag is empty
+        if tag == "":
+            continue
+
+        # add tag
         logger.debug(f"Adding tag with name: {tag}")
         new_tag = orm.Tag(name=tag)
         ss.add(new_tag)

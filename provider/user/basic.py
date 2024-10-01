@@ -162,18 +162,12 @@ async def check_get_contact_info_permission(
 ):
     """Check if a specific user has the permission to access another user's contact info
 
-
-
     Return None if check passed. Raise error if insufficient permission
 
     Args
 
     - `requester_id`: `user_id` of requester
     - `user_id`: `user_id` of the user whose contact info is being requested
-
-    Returns
-
-    - None
 
     Raises
 

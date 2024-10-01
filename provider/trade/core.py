@@ -22,6 +22,14 @@ from exception import error as exc
 from ..database import init_session_maker, add_eager_load_to_stmt
 
 
+async def get_trade_by_id(ss: SessionDep, trade_id: int) -> orm.TradeRecord:
+    stmt = select(orm.TradeRecord).where(orm.TradeRecord.trade_id == trade_id)
+    try:
+        return (await ss.scalars(stmt)).one()
+    except sqlexc.NoResultFound:
+        raise exc.NoResultError(f"Could not find transaction with id: {trade_id}")
+
+
 async def get_cascade_trade_from_buyers(ss: SessionDep, buyers: Sequence[orm.User]):
     """
     Get all trades by a list of buyers

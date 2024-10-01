@@ -162,7 +162,8 @@ async def remove_items_cascade(
     Cascade
 
     - `Question` All question related to these items
-    - `AssociationItemTag` All tags associations (todo)
+    - `AssociationItemTag` All tags associations
+    - `AssociationFavItem`
 
     Raises
 
@@ -189,6 +190,9 @@ async def remove_items_cascade(
     asso_fav_items = await get_cascade_fav_items_by_items(ss, items)
 
     fav_count = await remove_fav_items_cascade(ss, asso_fav_items, commit=False)
+    
+    # todo
+    # remove all related trade record
 
     # delete items itself
     for i in items:
