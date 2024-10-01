@@ -96,8 +96,7 @@ class User(SQLBaseModel):
     user_id: Mapped[IntPrimaryKey]
 
     campus_id: Mapped[NormalString | None]
-    username: Mapped[NormalString]
-    password: Mapped[LongString] = mapped_column()
+    username: Mapped[LongString]
     description: Mapped[LongString] = mapped_column(nullable=True)
     created_time: Mapped[TimeStamp]
 
@@ -126,6 +125,9 @@ class User(SQLBaseModel):
         "item",
         creator=lambda item_orm: AssociationUserFavouriteItem(item=item_orm),
     )
+
+    # super token id relationship
+    supertoken_ids: Mapped[List["SuperTokenUser"]] = relationship(back_populates="user")
 
     async def verify_role(self, ss: AsyncSession, roles: str | list[str]) -> bool:
         """Check if this user has some roles
@@ -157,6 +159,22 @@ class User(SQLBaseModel):
             return False
 
         return await ss.run_sync(lambda ss: _check_user_has_allowed_roles(ss))
+
+
+class SuperTokenUser(SQLBaseModel):
+    """
+    Store the user-super_token_user mapping relation
+    """
+
+    __tablename__ = "supertoken_user"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
+    supertoken_id: Mapped[LongString] = mapped_column(primary_key=True)
+    created_time: Mapped[TimeStamp]
+
+    user: Mapped["User"] = relationship(
+        back_populates="supertoken_ids",
+    )
 
 
 class ContactInfoType(Enum):

@@ -6,6 +6,9 @@ from fastapi.requests import Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.exception_handlers import http_exception_handler
 
+from supertokens_python.framework.fastapi import get_middleware
+from provider import supertokens
+
 import uvicorn
 from loguru import logger
 
@@ -22,13 +25,17 @@ from endpoints.trade import trade_router
 
 # CORS Middleware
 middlewares = [
+    # for more info about supertoken middleware, check out:
+    # https://supertokens.com/docs/thirdpartyemailpassword/custom-ui/init/backend#4-add-the-supertokens-apis--cors-setup
+    # CORS Middleware
+    Middleware(get_middleware()),
     Middleware(
         CORSMiddleware,
         allow_origins=config.general.ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-    )
+    ),
 ]
 
 # include sub routers
@@ -38,7 +45,7 @@ app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/user", tags=["User"])
 app.include_router(item_router, prefix="/item", tags=["Item"])
 app.include_router(fav_router, prefix="/fav", tags=["Favourite"])
-app.include_router(trade_router, prefix='/trade', tags=['Trade'])
+app.include_router(trade_router, prefix="/trade", tags=["Trade"])
 
 
 @app.exception_handler(RequestValidationError)
