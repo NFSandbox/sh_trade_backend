@@ -15,6 +15,7 @@ from schemes import sql as orm
 from schemes import db as db_sche
 
 from config import sql
+from config import general as gene_config
 
 from provider.database import session_manager, _engine
 
@@ -58,7 +59,30 @@ async def init_supertoken_db():
             res = conn.execute(text("CREATE DATABASE supertokens"))
 
     # try start supertokens
-    res = subprocess.run(["supertokens", "start"], shell=True)
+    res = subprocess.run(
+        [
+            "supertokens",
+            "start",
+            "-h",
+            gene_config.ST_HOST,
+            "-p",
+            str(gene_config.ST_PORT),
+        ],
+        shell=True,
+    )
+
+    # try add dashboard admin user
+    httpx.post(
+        f"{gene_config.ST_PROTOCAL}://{gene_config.ST_HOST}:{gene_config.ST_PORT}/recipe/dashboard/user",
+        headers={
+            "rid": "dashboard",
+            "Content-Type": "application/json",
+        },
+        json={
+            "email": gene_config.ST_DASHBOARD_USERNAME,
+            "password": gene_config.ST_DASHBOARD_PASSWORD,
+        },
+    )
 
 
 DEFAULT_USERS = [
