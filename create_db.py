@@ -58,6 +58,8 @@ async def init_supertoken_db():
             res = conn.execute(text("DROP DATABASE IF EXISTS supertokens"))
             res = conn.execute(text("CREATE DATABASE supertokens"))
 
+    logger.info("Finished cleaning Supertokens database")
+
     # try start supertokens
     res = subprocess.run(
         [
@@ -72,7 +74,7 @@ async def init_supertoken_db():
     )
 
     # try add dashboard admin user
-    httpx.post(
+    res = httpx.post(
         f"{gene_config.ST_PROTOCAL}://{gene_config.ST_HOST}:{gene_config.ST_PORT}/recipe/dashboard/user",
         headers={
             "rid": "dashboard",
@@ -83,6 +85,9 @@ async def init_supertoken_db():
             "password": gene_config.ST_DASHBOARD_PASSWORD,
         },
     )
+
+    if res.status_code != 200:
+        raise RuntimeError("Failed to add supertoken dashboard admin account.")
 
 
 DEFAULT_USERS = [

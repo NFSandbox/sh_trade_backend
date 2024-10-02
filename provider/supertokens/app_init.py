@@ -22,6 +22,9 @@ from supertokens_python.framework import BaseRequest
 from typing import Dict, Any
 
 
+from config import general as gene_config
+
+
 def get_token_transfer_method(
     req: BaseRequest, for_create_new_session: bool, user_context: Dict[str, Any]
 ):
@@ -39,7 +42,7 @@ init(
     ),
     supertokens_config=SupertokensConfig(
         # https://try.supertokens.com is for demo purposes. Replace this with the address of your core instance (sign up on supertokens.com), or self host a core.
-        connection_uri="http://localhost:3567",
+        connection_uri=f"{gene_config.ST_PROTOCAL}://{gene_config.ST_HOST}:{gene_config.ST_PORT}",
         # api_key=<API_KEY(if configured)>
     ),
     framework="fastapi",
