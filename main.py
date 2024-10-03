@@ -106,19 +106,11 @@ async def internal_error_handler(request: Request, e: Exception):
 
 # Start uvicorn server
 if __name__ == "__main__":
-    # determine host
-    host = "127.0.0.1"
-    if config.general.ON_CLOUD:
-        host = "0.0.0.0"
-
-    # logger
-    logger.info(f"OnCloud: {config.general.ON_CLOUD}, using host: {host}")
-
     # start uvicorn server with directory monitor
     uvicorn.run(
         app="main:app",
         # here in some VPS 127.0.0.1 won't work, need to use 0.0.0.0 instead
-        host=host,
+        host=config.general.HOST,
         port=config.general.PORT,
         reload=True,
         # hide uvicorn header

@@ -37,12 +37,13 @@ async def init_supertoken_db():
     make sure you have backup the supertoken database.
     """
     # try stop supertoken
-    res = subprocess.run(["supertokens", "stop"], shell=True)
+    res = subprocess.run(["supertokens stop"], shell=True)
     if res.returncode != 0:
         raise RuntimeError(
             "Failed to stop supertokens services. This is most likely caused by "
             "insufficient permissions. "
-            "Try running this script with sudo or administration privilege on Windows."
+            "Try running this script with sudo or administration privilege on Windows. "
+            f"Return code: {res.returncode}"
         )
 
     st_db_engine = create_engine(
@@ -63,19 +64,16 @@ async def init_supertoken_db():
     # try start supertokens
     res = subprocess.run(
         [
-            "supertokens",
-            "start",
-            "-h",
-            gene_config.ST_HOST,
-            "-p",
-            str(gene_config.ST_PORT),
+            "supertokens start"
+            f" -h {gene_config.ST_HOST}"
+            f" -p {str(gene_config.ST_PORT)}"
         ],
         shell=True,
     )
 
     # try add dashboard admin user
     res = httpx.post(
-        f"{gene_config.ST_PROTOCAL}://{gene_config.ST_HOST}:{gene_config.ST_PORT}/recipe/dashboard/user",
+        f"{gene_config.GET_SUPERTOKEN_BACKEND_URL()}/recipe/dashboard/user",
         headers={
             "rid": "dashboard",
             "Content-Type": "application/json",
@@ -117,8 +115,13 @@ async def add_default_data():
 
             # adding users
             for u in DEFAULT_USERS:
+                logger.debug(
+                    "Sending request to: "
+                    f"{gene_config.GET_BACKEND_URL()}/auth/signup"
+                )
+
                 res = httpx.post(
-                    "http://localhost:8000/auth/signup",
+                    f"{gene_config.GET_BACKEND_URL()}/auth/signup",
                     json=u,
                 )
 

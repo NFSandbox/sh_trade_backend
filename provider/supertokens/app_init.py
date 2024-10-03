@@ -35,14 +35,14 @@ def get_token_transfer_method(
 init(
     app_info=InputAppInfo(
         app_name="AHUPY",
-        api_domain="http://localhost:8000",
-        website_domain="http://localhost:3000",
+        api_domain=gene_config.GET_BACKEND_URL(),
+        website_domain=gene_config.GET_FRONTEND_URL(),
         api_base_path="/auth",
         website_base_path="/auth",
     ),
     supertokens_config=SupertokensConfig(
         # https://try.supertokens.com is for demo purposes. Replace this with the address of your core instance (sign up on supertokens.com), or self host a core.
-        connection_uri=f"{gene_config.ST_PROTOCAL}://{gene_config.ST_HOST}:{gene_config.ST_PORT}",
+        connection_uri=gene_config.GET_SUPERTOKEN_BACKEND_URL(),
         # api_key=<API_KEY(if configured)>
     ),
     framework="fastapi",
