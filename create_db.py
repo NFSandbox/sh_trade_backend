@@ -37,7 +37,11 @@ async def init_supertoken_db():
     make sure you have backup the supertoken database.
     """
     # try stop supertoken
-    res = subprocess.run(["supertokens stop"], shell=True)
+    if gene_config.is_dev():
+        res = subprocess.run(["supertokens", "stop"], shell=True)
+    else:
+        res = subprocess.run(["supertokens stop"], shell=True)
+
     if res.returncode != 0:
         raise RuntimeError(
             "Failed to stop supertokens services. This is most likely caused by "
@@ -62,14 +66,27 @@ async def init_supertoken_db():
     logger.info("Finished cleaning Supertokens database")
 
     # try start supertokens
-    res = subprocess.run(
-        [
-            "supertokens start"
-            f" -h {gene_config.ST_HOST}"
-            f" -p {str(gene_config.ST_PORT)}"
-        ],
-        shell=True,
-    )
+    if gene_config.is_dev():
+        res = subprocess.run(
+            [
+                "supertokens",
+                "start",
+                "-h",
+                gene_config.ST_HOST,
+                "-p",
+                str(gene_config.ST_PORT),
+            ],
+            shell=True,
+        )
+    else:
+        res = subprocess.run(
+            [
+                "supertokens start"
+                f" -h {gene_config.ST_HOST}"
+                f" -p {str(gene_config.ST_PORT)}"
+            ],
+            shell=True,
+        )
 
     # try add dashboard admin user
     res = httpx.post(

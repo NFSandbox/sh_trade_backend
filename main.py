@@ -78,7 +78,7 @@ async def base_error_handler(request: Request, e: BaseError):
     return await http_exception_handler(
         request,
         HTTPException(
-            status_code=e.status, detail=e.to_pydantic_base_error().model_dump()
+            status_code=200, detail=e.to_pydantic_base_error().model_dump()
         ),
     )
 

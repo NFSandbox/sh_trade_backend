@@ -147,7 +147,7 @@ async def remove_contact_info(
             info_orm.delete()
 
     if found_flag == False:
-        raise exc.NoResultError("Contact info not exists for current user")
+        raise exc.NoResultError(message="Contact info not exists for current user")
 
     try:
         await ss.commit()
