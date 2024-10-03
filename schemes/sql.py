@@ -10,7 +10,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 # sqlalchemy basics
-from sqlalchemy import Select, BIGINT, String, ForeignKey, Column, Table
+from sqlalchemy import Select, BIGINT, String, JSON, ForeignKey, Column, Table
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -29,6 +29,9 @@ from sqlalchemy.ext.associationproxy import AssociationProxy
 # easy soft delete
 from sqlalchemy_easy_softdelete.mixin import generate_soft_delete_mixin_class
 from sqlalchemy_easy_softdelete.hook import IgnoredTable
+
+# sqlalchemy json
+from sqlalchemy_json import NestedMutableJson
 
 
 # using datetime to get utc timestamp
@@ -386,3 +389,18 @@ class Role(SQLBaseModel):
         "user",
         creator=lambda user_orm: AssociationUserRole(user=user_orm),
     )
+
+
+class Notification(SQLBaseModel):
+
+    __tablename__ = "notification"
+
+    notification_id: Mapped[IntPrimaryKey] = mapped_column(autoincrement=True)
+
+    sender_id: Mapped[int] = mapped_column(
+        ForeignKey("user.user_id"), nullable=True, default=None
+    )
+    receiver_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
+    created_time: Mapped[TimeStamp]
+    read_time: Mapped[NullableTimeStamp]
+    content: Mapped[dict] = mapped_column(NestedMutableJson)

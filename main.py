@@ -22,6 +22,7 @@ from endpoints.user import user_router
 from endpoints.item import item_router
 from endpoints.fav import fav_router
 from endpoints.trade import trade_router
+from endpoints.notification import notification_router
 
 # CORS Middleware
 middlewares = [
@@ -46,6 +47,7 @@ app.include_router(user_router, prefix="/user", tags=["User"])
 app.include_router(item_router, prefix="/item", tags=["Item"])
 app.include_router(fav_router, prefix="/fav", tags=["Favourite"])
 app.include_router(trade_router, prefix="/trade", tags=["Trade"])
+app.include_router(notification_router, prefix="/notification", tags=["Notification"])
 
 
 @app.exception_handler(RequestValidationError)
@@ -77,9 +79,7 @@ async def base_error_handler(request: Request, e: BaseError):
     """
     return await http_exception_handler(
         request,
-        HTTPException(
-            status_code=200, detail=e.to_pydantic_base_error().model_dump()
-        ),
+        HTTPException(status_code=200, detail=e.to_pydantic_base_error().model_dump()),
     )
 
 

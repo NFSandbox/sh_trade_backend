@@ -2,7 +2,7 @@
 Declare all schemas related to an SQL entities, used for API I/O validations.
 """
 
-from typing import Optional, Annotated
+from typing import Optional, Annotated, Literal, Sequence, Dict
 from schemes import sql as orm
 
 from pydantic import BaseModel, Field, PositiveInt
@@ -111,3 +111,98 @@ class TradeRecordOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class NotificationContentOut(BaseModel):
+    """
+    Base pydantic model for Notification.content ORM columns.
+
+    Do not use this base class or all of its subclasses directly.
+    Instead, use the union type `NotificationContentOutUnion` or
+    `NotificationOut` model class.
+    """
+
+    content_type: Literal["text"] = "text"
+
+    title: str
+    message: str
+
+    class Config:
+        from_attributes = True
+
+
+class MarkDownNotificationContentOut(NotificationContentOut):
+    """
+    Notifications that with a markdown content as message.
+
+    Fields
+
+    - `trusted` If this markdown content could be trusted.
+
+    Generally, this field is set to `True` only if the message
+    is sent by system.
+
+    If `True`, the HTML tags in content may be directly rendered
+    on the client browser
+    """
+
+    content_type: Literal["markdown"] = "markdown"
+
+    trusted: bool = False
+
+
+class URLActionNotificationContentOut(MarkDownNotificationContentOut):
+    """
+    Notification with a list of URL-redirect actions
+
+    Fields
+
+    - All in `MarkDownNotificationContentOut`
+    - `actions` List of URL-redirect actions. Check out `URLAction`
+    """
+
+    content_type: Literal["url_action"] = "url_action"
+
+    class URLAction(BaseModel):
+        """
+        Fields
+
+        - `name` Name of this action
+        - `url` URL to redirect to
+        - `primary` Whether this action is primary
+        - `danger` Whether this action is dangerous
+        """
+
+        name: str
+        url: str
+        primary: bool = False
+        danger: bool = False
+
+    actions: Sequence[URLAction]
+
+
+NotificationContentOutUnion = (
+    NotificationContentOut
+    | MarkDownNotificationContentOut
+    | URLActionNotificationContentOut
+)
+
+
+class NotificationOut(BaseModel):
+    """
+    Model for notification info.
+
+    `content` field is a discriminated union type. For more info, check
+    out docs of each discriminator type.
+    """
+
+    notification_id: int
+    sender_id: int | None
+    receiver_id: int
+    created_time: int
+    read_time: int | None = None
+    content: NotificationContentOutUnion = Field(discriminator="content_type")
+
+    class Config:
+        from_attributes = True
+        # arbitrary_types_allowed = True
