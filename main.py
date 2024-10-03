@@ -17,7 +17,7 @@ from provider import supertokens
 import uvicorn
 from loguru import logger
 
-from exception.error import BaseError, BaseErrorOut
+from exception.error import BaseError, BaseErrorOut, InternalServerError
 
 import config
 
@@ -85,9 +85,18 @@ async def base_error_handler(request: Request, e: BaseError):
 
     BaseError is a custom base class for error raised in this application.
     """
+    # replace error if the error is from serverside.
+    # this is to prevent unexpected info leak from server
+    error_to_client = e
+    if e.status >= 500:
+        error_to_client = InternalServerError()
+
     return await http_exception_handler(
         request,
-        HTTPException(status_code=200, detail=e.to_pydantic_base_error().model_dump()),
+        HTTPException(
+            status_code=200,
+            detail=error_to_client.to_pydantic_base_error().model_dump(),
+        ),
     )
 
 
@@ -101,13 +110,7 @@ async def internal_error_handler(request: Request, e: Exception):
         request,
         HTTPException(
             status_code=500,
-            detail=BaseError(
-                name="internal_server_error",
-                message="An error occurred in server-side. If error persists, please contact website admin",
-                status=500,
-            )
-            .to_pydantic_base_error()
-            .model_dump(),
+            detail=InternalServerError().to_pydantic_base_error().model_dump(),
         ),
     )
 

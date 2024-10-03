@@ -28,12 +28,38 @@ class BaseError(Exception):
         return BaseErrorOut.from_base_error(self)
 
 
+class InternalServerError(BaseError):
+    """
+    Raise when internal server error occurred
+
+    The status code passed to this error should >= 500, if not,
+    the init method will set to 500 forcefully.
+    """
+
+    def __init__(
+        self,
+        name: str = "internal_server_error",
+        message: str = "An error occurred in server-side. If error persists, please contact website admin",
+        status: int = 500,
+    ) -> None:
+        # should not have http status code less then 500
+        if status < 500:
+            status = 500
+
+        super().__init__(
+            name=name,
+            message=message,
+            status=status,
+        )
+
+
 class PermissionError(BaseError):
     """
     Raise when permission error occurred
-    
+
     Could automatically adding stringified roles info if `roles` provided
     """
+
     def __init__(
         self,
         roles: list[orm.Role] | None = None,
