@@ -6,6 +6,9 @@ from fastapi.requests import Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.exception_handlers import http_exception_handler
 
+from supertokens_python.framework.fastapi import get_middleware
+from provider import supertokens
+
 import uvicorn
 from loguru import logger
 
@@ -22,13 +25,17 @@ from endpoints.trade import trade_router
 
 # CORS Middleware
 middlewares = [
+    # for more info about supertoken middleware, check out:
+    # https://supertokens.com/docs/thirdpartyemailpassword/custom-ui/init/backend#4-add-the-supertokens-apis--cors-setup
+    # CORS Middleware
+    Middleware(get_middleware()),
     Middleware(
         CORSMiddleware,
         allow_origins=config.general.ALLOWED_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-    )
+    ),
 ]
 
 # include sub routers
@@ -38,7 +45,7 @@ app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/user", tags=["User"])
 app.include_router(item_router, prefix="/item", tags=["Item"])
 app.include_router(fav_router, prefix="/fav", tags=["Favourite"])
-app.include_router(trade_router, prefix='/trade', tags=['Trade'])
+app.include_router(trade_router, prefix="/trade", tags=["Trade"])
 
 
 @app.exception_handler(RequestValidationError)
@@ -71,7 +78,7 @@ async def base_error_handler(request: Request, e: BaseError):
     return await http_exception_handler(
         request,
         HTTPException(
-            status_code=e.status, detail=e.to_pydantic_base_error().model_dump()
+            status_code=200, detail=e.to_pydantic_base_error().model_dump()
         ),
     )
 
@@ -99,19 +106,11 @@ async def internal_error_handler(request: Request, e: Exception):
 
 # Start uvicorn server
 if __name__ == "__main__":
-    # determine host
-    host = "127.0.0.1"
-    if config.general.ON_CLOUD:
-        host = "0.0.0.0"
-
-    # logger
-    logger.info(f"OnCloud: {config.general.ON_CLOUD}, using host: {host}")
-
     # start uvicorn server with directory monitor
     uvicorn.run(
         app="main:app",
         # here in some VPS 127.0.0.1 won't work, need to use 0.0.0.0 instead
-        host=host,
+        host=config.general.HOST,
         port=config.general.PORT,
         reload=True,
         # hide uvicorn header

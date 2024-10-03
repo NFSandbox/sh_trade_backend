@@ -11,6 +11,9 @@ from fastapi import APIRouter, Query, Depends, Request, Response, status, Body
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 
+from supertokens_python.recipe.emailpassword.asyncio import sign_in, sign_up
+from supertokens_python.recipe.emailpassword.interfaces import SignInOkResult, SignInWrongCredentialsError
+
 from sqlalchemy.exc import MultipleResultsFound
 
 from config import auth as auth_conf
@@ -42,75 +45,47 @@ token_router = APIRouter()
 auth_router = APIRouter()
 
 
-def verify_password(original_password: str, hashed_password: str) -> bool:
-    """
-    Check the validity of a password against a hashed password
+# def verify_password(original_password: str, hashed_password: str) -> bool:
+#     """
+#     Check the validity of a password against a hashed password
 
-    Returns:
-        bool value represents the check result
-    """
+#     Returns:
+#         bool value represents the check result
+#     """
 
-    return passlib_context.verify(original_password, hashed_password)
-
-
-async def check_password_with_db(
-    session: db_provider.SessionDep, contact_info: str, password: str
-):
-    """Verify username and password using the data in database
-
-    Args:
-        contact_info (str): contact info
-        contact_info: Contact info user provided
-        password: Password user provided
-
-    Return:
-        user: ORM User instance if verified
-
-    Raises:
-        AuthError: if the password is incorrect or contact info is invalid
-    """
-    user = await auth_provider.get_user_by_contact_info(session, contact_info)
-
-    # invalid contact info
-    if user is None:
-        raise exc.AuthError(invalid_contact=True)
-
-    logger.debug(f"Input original password: {password}")
-    verify_res = verify_password(password, user.password)
-    # invalid password
-    if not verify_res:
-        raise exc.AuthError(invalid_password=True)
-
-    # success
-    return user
+#     return passlib_context.verify(original_password, hashed_password)
 
 
-async def login_for_token(
-    session: db_provider.SessionDep, username: str, password: str
-):
-    # get user info based on auth credentials
-    try:
-        user = await check_password_with_db(session, username, password)
-    except exc.AuthError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            # this header content is specified in oauth2 spec
-            headers={"WWW-Authenticate": "Bearer"},
-            detail=exc.BaseErrorOut.from_base_error(e).model_dump(),
-        )
-    roles: list[str] = await session.run_sync(
-        lambda x: [role.role_name for role in user.roles]
-    )
+# async def check_password_with_db(
+#     session: db_provider.SessionDep, contact_info: str, password: str
+# ):
+#     """Verify username and password using the data in database
 
-    # return generated token based on user info
-    return auth_sche.TokenOut(
-        access_token=auth_sche.TokenData(
-            user_id=user.user_id,
-            roles=roles,
-            created_time=orm.get_current_timestamp_ms(),
-        ).to_jwt_str(),
-        token_type="bearer",
-    )
+#     Args:
+#         contact_info (str): contact info
+#         contact_info: Contact info user provided
+#         password: Password user provided
+
+#     Return:
+#         user: ORM User instance if verified
+
+#     Raises:
+#         AuthError: if the password is incorrect or contact info is invalid
+#     """
+#     user = await auth_provider.get_user_by_contact_info(session, contact_info)
+
+#     # invalid contact info
+#     if user is None:
+#         raise exc.AuthError(invalid_contact=True)
+
+#     logger.debug(f"Input original password: {password}")
+#     verify_res = verify_password(password, user.password)
+#     # invalid password
+#     if not verify_res:
+#         raise exc.AuthError(invalid_password=True)
+
+#     # success
+#     return user
 
 
 @auth_router.post(
@@ -118,20 +93,21 @@ async def login_for_token(
     responses=exc.openApiErrorMark(
         {401: "Error occurred when retrieving or verifying token"}
     ),
+    deprecated=True,
 )
 async def user_sign_in(
     username: Annotated[str, Body()],
     password: Annotated[str, Body()],
     resp: Response,
     session: db_provider.SessionDep,
-) -> auth_sche.TokenOut:
-    token = await login_for_token(session, username, password)
-    resp.set_cookie(
-        key=auth_conf.JWT_FRONTEND_COOKIE_KEY,
-        value=token.access_token,
-        max_age=auth_conf.TOKEN_EXPIRES_DELTA_HOURS * 60 * 60,
-    )
-    return token
+) -> None:
+    # token = await login_for_token(session, username, password)
+    # resp.set_cookie(
+    #     key=auth_conf.JWT_FRONTEND_COOKIE_KEY,
+    #     value=token.access_token,
+    #     max_age=auth_conf.TOKEN_EXPIRES_DELTA_HOURS * 60 * 60,
+    # )
+    return None
 
 
 async def get_current_user_use_header(
@@ -150,20 +126,22 @@ async def get_current_user_use_header(
     return token_data
 
 
-@auth_router.get("/logout")
+@auth_router.get("/logout", deprecated=True)
 async def user_sign_out():
     resp = JSONResponse(status_code=200, content={"is_logged_out": True})
     resp.delete_cookie(key=auth_conf.JWT_FRONTEND_COOKIE_KEY)
     return resp
 
 
-@auth_router.get("/test/token_dependency", response_model=auth_schema.TokenData)
+@auth_router.get(
+    "/test/token_dependency", response_model=auth_schema.TokenData, deprecated=True
+)
 async def get_current_token_info(
-    token_data: Annotated[
-        auth_schema.TokenData, Depends(user_provider.get_current_token)
-    ]
+    # token_data: Annotated[
+    #     auth_schema.TokenData, Depends(user_provider.get_current_token)
+    # ]
 ):
-    return token_data
+    return None
 
 
 @auth_router.get(
@@ -172,12 +150,12 @@ async def get_current_token_info(
     response_model_exclude_none=True,
 )
 async def get_current_user_info(
-    user: Annotated[orm.User, Depends(user_provider.get_current_user)]
+    user: user_provider.CurrentUserDep,
 ):
     return user
 
 
-@auth_router.post("/register", response_model=db_sche.UserOut)
+@auth_router.post("/register", response_model=db_sche.UserOut, deprecated=True)
 async def user_sign_up(
     ss: db_provider.SessionDep,
     info: Annotated[db_sche.UserIn, Body(embed=False)],

@@ -6,7 +6,12 @@ from sqlalchemy.orm import selectinload, QueryableAttribute, aliased
 from sqlalchemy.sql import and_
 from sqlalchemy import exc as sqlexc
 
+from supertokens_python.asyncio import delete_user
+
 from fastapi import Depends, Request
+
+from supertokens_python.recipe.session.framework.fastapi import verify_session
+from supertokens_python.recipe.session import SessionContainer
 
 from config import auth as auth_conf
 
@@ -28,44 +33,34 @@ __all__ = [
     "get_user_from_user_id",
     "get_current_user_or_none",
     "get_current_user",
-    "get_current_token",
     "remove_users_cascade",
 ]
 
 
-async def get_current_token(req: Request):
-    """
-    Get current user based on user token in request cookies or raise error
-
-    This function could be used as a FastAPI dependency
-    """
-    # no token
-    token = req.cookies.get(auth_conf.JWT_FRONTEND_COOKIE_KEY)
-    if token is None:
-        raise exc.TokenError(no_token=True)
-
-    token_data = auth_sche.TokenData.from_jwt_str(token)
-
-    # token expired
-    if token_data.is_expired():
-        raise exc.TokenError(expired=True)
-
-    return token_data
+SuperTokenSessionDep = Annotated[SessionContainer, Depends(verify_session())]
+SuperTokenSessionOrNoneDep = Annotated[
+    SessionContainer | None, Depends(verify_session(session_required=False))
+]
 
 
 async def get_current_user(
     session: SessionDep,
-    token: Annotated[auth_sche.TokenData, Depends(get_current_token)],
+    supertoken_user: SuperTokenSessionOrNoneDep,
 ):
     """
     Get current user based on user token
 
     This function could be used as a FastAPI dependency
     """
-    return await get_user_from_user_id(
-        session,
-        user_id=token.user_id,
-    )
+    if supertoken_user is None:
+        raise exc.TokenError(no_token=True)
+
+    supertoken_id = supertoken_user.user_id
+    orm_supertoken = await session.get(orm.SuperTokenUser, supertoken_id)
+    assert orm_supertoken is not None
+    orm_user = await session.run_sync(lambda ss: orm_supertoken.user)
+
+    return orm_user
 
 
 CurrentUserDep = Annotated[orm.User, Depends(get_current_user)]
@@ -76,7 +71,7 @@ Dependency annotaion for `get_current_user` function
 
 async def get_current_user_or_none(
     ss: SessionDep,
-    req: Request,
+    supertoken_user: SuperTokenSessionOrNoneDep,
 ) -> orm.User | None:
     """
     FastAPI dependency to get current user.
@@ -85,9 +80,10 @@ async def get_current_user_or_none(
     when this function could not retrieve valid user info, it will NOT raise error
     but return `None`
     """
+    if supertoken_user is None:
+        return None
     try:
-        token = await get_current_token(req)
-        return await get_current_user(ss, token)
+        return await get_current_user(ss, supertoken_user)
     except:
         return None
 
@@ -260,6 +256,14 @@ async def remove_users_cascade(
 
     # remove associations user-role
     assoc_user_role_total = await remove_all_roles_of_users(ss, users, commit=False)
+
+    # remove supertokens
+    for user in users:
+        for supertoken_user in await ss.run_sync(lambda ss: user.supertoken_ids):
+            # contact usertoken backend to remove supertoken user
+            await delete_user(supertoken_user.supertoken_id)
+            # remove supertoken user relationship in business database
+            supertoken_user.delete()
 
     # finally, remove user itself
     user_total = gene_sche.BulkOpeartionInfo(operation="Remove users")
