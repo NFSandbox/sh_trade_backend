@@ -91,6 +91,7 @@ class AssociationUserRole(SQLBaseModel):
 
     user: Mapped["User"] = relationship(back_populates="association_roles")
     role: Mapped["Role"] = relationship(back_populates="association_users")
+    role_name: AssociationProxy[str] = association_proxy("role", "role_name")
 
 
 class User(SQLBaseModel):
@@ -117,6 +118,10 @@ class User(SQLBaseModel):
         "association_roles",
         "role",
         creator=lambda role_orm: AssociationUserRole(role=role_orm),
+    )
+    role_name_list: AssociationProxy[List[str]] = association_proxy(
+        "association_roles",
+        "role_name",
     )
 
     # relation about fav items

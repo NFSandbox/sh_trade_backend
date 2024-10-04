@@ -141,12 +141,13 @@ class RBACManager[
         if role not in self.roles:
             raise InvalidRole(role)
 
-    def check_role_has_permission(
+    def check_role_has_all_permissions(
         self,
         role: RoleType | Any,
-        permission: PermissionType,
+        permissions: Set[PermissionType],
     ) -> None:
         self.check_role(role)
 
-        if not permission in self._compiled_role_permissions[role]:
-            raise InsufficientPermission(role, permission)
+        for p in permissions:
+            if p not in self._compiled_role_permissions[role]:
+                raise InsufficientPermission(role=role, permission=p)

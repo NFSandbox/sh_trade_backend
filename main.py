@@ -145,6 +145,8 @@ async def swagger_ui_html():
 
 @app.get("/", include_in_schema=False)
 async def redirect_to_doc():
+    if config.general.is_dev():
+        return RedirectResponse(f"{config.general.GET_BACKEND_URL()}/doc")
     return RedirectResponse("https://doc.api.ahuer.com")
 
 

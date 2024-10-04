@@ -47,7 +47,6 @@ async def update_description(
     if (user_id is not None) and (not await user.verify_role(session, ["admin"])):
         raise exc.PermissionError(
             message="You don't have permission to change other users description.",
-            roles=await user.awaitable_attrs.roles,
         )
 
     # try get the specified user
