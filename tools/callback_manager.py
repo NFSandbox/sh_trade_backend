@@ -61,7 +61,7 @@ class CallbackManager[
         """
         Trigger callbacks for a given signal.
 
-        Raise if callback want to interrput the process
+        Raise `CallbackInterrupted` if callback want to interrput the process
         """
         # check if disabled
         if self.disabled:

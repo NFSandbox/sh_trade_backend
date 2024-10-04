@@ -3,6 +3,7 @@ sql.py
 dorm.py
 general.py
 system.py
+rbac.py
 
 # temp file
 ahu_header.json

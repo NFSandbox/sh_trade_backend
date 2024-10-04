@@ -23,6 +23,14 @@ from exception import error as exc
 notification_router = APIRouter()
 
 
-@notification_router.get("", response_model=Sequence[db_sche.NotificationOut])
-async def get_notifications():
+@notification_router.post("/send", response_model=Sequence[db_sche.NotificationOut])
+async def send_notifications(
+    ss: SessionDep,
+    user: CurrentUserDep,
+    receiver_id: Annotated[int, Body()],
+    content: Annotated[str, Body(max_length=sys_config.MAX_LENGTH_USER_SENT_MESSAGE)],
+):
+    """
+    Send a message to other
+    """
     pass
