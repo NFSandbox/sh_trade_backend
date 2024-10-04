@@ -173,7 +173,13 @@ async def add_default_data():
                 orm.ContactInfo(
                     contact_type=orm.ContactInfoType.email,
                     contact_info="nf@nfblogs.com",
-                )
+                ),
+            )
+            contact_info.append(
+                orm.ContactInfo(
+                    contact_type=orm.ContactInfoType.telegram,
+                    contact_info="975140440",
+                ),
             )
         # auto commit
     # auto close ss

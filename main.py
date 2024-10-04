@@ -88,8 +88,12 @@ async def base_error_handler(request: Request, e: BaseError):
     # replace error if the error is from serverside.
     # this is to prevent unexpected info leak from server
     error_to_client = e
+
     if e.status >= 500:
+        logger.exception(e)
         error_to_client = InternalServerError()
+    else:
+        logger.error(e)
 
     return await http_exception_handler(
         request,

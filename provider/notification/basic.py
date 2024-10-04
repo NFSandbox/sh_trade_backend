@@ -44,6 +44,8 @@ from .error import (
     SenderNotTrusted,
 )
 
+__all__ = ["NotificationSender", "log_middleware"]
+
 
 class NotificationSender:
     """
@@ -60,6 +62,12 @@ class NotificationSender:
 
     Do not directly write attributes other then the listed ones.
     """
+
+    callback_manager = CallbackManager[
+        ["NotificationSender"],
+        Awaitable[Any] | Any,
+        Literal["before", "upon", "after"],
+    ]()
 
     def __init__(
         self,
@@ -92,11 +100,6 @@ class NotificationSender:
         """
         If this message sender instance a trusted instance
         """
-        self.callback_manager = CallbackManager[
-            ["NotificationSender"],
-            Awaitable[Any] | Any,
-            Literal["before", "upon", "after"],
-        ]()
 
         # temp value to store the data of next send operation
         # This value is intended to exposed or maybe changed by callbacks
@@ -150,11 +153,11 @@ class NotificationSender:
         content: db_sche.NotificationContentOut,
         receiver: orm.User | None = None,
         ss: AsyncSession | None = None,
-    ) -> bool:
+    ) -> orm.Notification | None:
         """
         Send a notification
 
-        Return `True` if message sent.
+        Return the ORM instance of sent notification if success
         """
         self.init_curr(content=content, receiver=receiver, session=ss)
 
@@ -162,23 +165,24 @@ class NotificationSender:
         try:
             await self.callback_manager.trigger("before", self)
         except CallbackInterrupted:
-            return False
+            return
 
         # validity check
         self.check_validity()
 
         # construct orm
+        assert self.curr_content is not None
         self.curr_orm_notification = orm.Notification(
-            sender=self.sender,
-            receiver=receiver,
-            content=content.model_dump(),
+            sender=self.curr_sender,
+            receiver=self.curr_receiver,
+            content=self.curr_content.model_dump(),
         )
 
         # upon callback
         try:
             await self.callback_manager.trigger("upon", self)
         except CallbackInterrupted:
-            return False
+            return
 
         # add to database
         assert self.curr_session is not None
@@ -190,6 +194,14 @@ class NotificationSender:
         try:
             await self.callback_manager.trigger("after", self)
         except CallbackInterrupted:
-            return True
+            return self.curr_orm_notification
 
-        return True
+        return self.curr_orm_notification
+
+
+async def log_middleware(sender: NotificationSender):
+    assert sender.curr_sender is not None
+    assert sender.curr_receiver is not None
+    logger.debug(
+        f"Notification Sent. {sender.curr_sender.user_id} -> {sender.curr_receiver.user_id}"
+    )

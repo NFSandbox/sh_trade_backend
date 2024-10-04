@@ -137,6 +137,16 @@ class User(SQLBaseModel):
     # super token id relationship
     supertoken_ids: Mapped[List["SuperTokenUser"]] = relationship(back_populates="user")
 
+    # notification relationship
+    sent_notifications: Mapped[List["Notification"]] = relationship(
+        "Notification", back_populates="sender", foreign_keys="Notification.sender_id"
+    )
+    received_notifications: Mapped[List["Notification"]] = relationship(
+        "Notification",
+        back_populates="receiver",
+        foreign_keys="Notification.receiver_id",
+    )
+
     async def verify_role(self, ss: AsyncSession, roles: str | list[str]) -> bool:
         """Check if this user has some roles
 
@@ -188,6 +198,7 @@ class SuperTokenUser(SQLBaseModel):
 class ContactInfoType(Enum):
     phone = "phone"
     email = "email"
+    telegram = "telegram"
 
 
 class ContactInfo(SQLBaseModel):
@@ -409,3 +420,11 @@ class Notification(SQLBaseModel):
     created_time: Mapped[TimeStamp]
     read_time: Mapped[NullableTimeStamp]
     content: Mapped[dict] = mapped_column(NestedMutableJson)
+
+    # relationships
+    sender: Mapped["User | None"] = relationship(
+        back_populates="sent_notifications", foreign_keys=sender_id
+    )
+    receiver: Mapped["User"] = relationship(
+        back_populates="received_notifications", foreign_keys=receiver_id
+    )

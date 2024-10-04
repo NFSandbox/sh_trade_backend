@@ -151,18 +151,32 @@ class PermissionsChecker:
     This class could be used as FastAPI dependency:
 
         p = Annotated[bool, PermissionsChecker({"read:all", "write:self"})]
+
+    Args
+
+    - `required_permissions` The permission need to be checked
+    - `raise_on_fail` If `True`, will raise error if permission check failed.
+      Else will return `False` instead of raise.
     """
 
     def __init__(
-        self, required_permissions: Set[rbac_config.AllowedPermissionsLiteral]
+        self,
+        required_permissions: Set[rbac_config.AllowedPermissionsLiteral],
+        raise_on_fail: bool = True,
     ) -> None:
         self.required_permissions = required_permissions
+        self.raise_on_fail = raise_on_fail
 
-    def __call__(self, ss: SessionDep, user: CurrentUserOrNoneDep):
-        return self.check_permission(ss, user)
+    async def __call__(self, ss: SessionDep, user: CurrentUserOrNoneDep):
+        return await self.check_permission(ss, user)
 
-    # def __await__(self, ss: SessionDep, user: CurrentUserOrNoneDep):
-    #     return self.check_permission(ss, user).__await__
-
-    async def check_permission(self, ss: SessionDep, user: CurrentUserOrNoneDep):
-        return await check_user_permission(ss, user, self.required_permissions)
+    async def check_permission(
+        self, ss: SessionDep, user: CurrentUserOrNoneDep
+    ) -> bool:
+        try:
+            await check_user_permission(ss, user, self.required_permissions)
+            return True
+        except Exception as e:
+            if self.raise_on_fail:
+                raise e
+            return False

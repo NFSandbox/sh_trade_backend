@@ -68,7 +68,7 @@ class CallbackManager[
             return None
 
         # get all callbacks to trigger
-        cb_dict = self.callbacks[signal]
+        cb_dict = self.callbacks.setdefault(signal, {})
 
         should_continue = True
         interrput_key: str | None = None
@@ -105,6 +105,7 @@ class CallbackManager[
         if key is None:
             key = fn.__name__
         try:
+            self.callbacks.setdefault(signal, {})
             self.callbacks[signal][key] = fn
         except KeyError:
             raise KeyError(
