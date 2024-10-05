@@ -23,6 +23,7 @@ from provider.notification import (
     log_middleware,
     send_to_telegram_callback,
     get_notifications,
+    get_notification_by_id,
 )
 
 from provider.database import SessionDep
@@ -71,6 +72,7 @@ class GetNotificationIn(BaseModel):
     sent: bool = True
     received: bool = False
     time_desc: bool = True
+    ignore_read: bool = False
     pagination: gene_sche.PaginationConfig | None = None
 
 
@@ -85,7 +87,7 @@ class GetNotificationOut(BaseModel):
 
 @notification_router.get(
     "/get",
-    response_model=gene_sche.PaginationedResultOut[list[db_sche.NotificationOut]],
+    response_model=gene_sche.PaginatedResultOut[list[db_sche.NotificationOut]],
     response_model_exclude_none=True,
 )
 async def get_user_notifications(
@@ -111,5 +113,36 @@ async def get_user_notifications(
     return await gene_sche.validate_result(
         ss,
         notification_res,
-        gene_sche.PaginationedResultOut[list[db_sche.NotificationOut]],
+        gene_sche.PaginatedResultOut[list[db_sche.NotificationOut]],
     )
+
+
+@notification_router.post("/read", response_model=db_sche.NotificationOut)
+async def mark_notification_read(
+    p: Annotated[bool, Depends(PermissionsChecker({"notification:read:self"}))],
+    ss: SessionDep,
+    user: CurrentUserDep,
+    notification_id: Annotated[int, Body(embed=True)],
+):
+    """
+    Mark a notification as read
+
+    Only receiver of the notification could mark that notification as read.
+
+    Raises
+    - `not_receiver`
+    """
+    orm_notification = await get_notification_by_id(ss, notification_id)
+
+    # permission check
+    if orm_notification.receiver_id != user.user_id:
+        raise exc.PermissionError(
+            name="not_receiver",
+            message="You could only mark notification as read of your own received notifications.",
+        )
+
+    orm_notification.read_time = orm.get_current_timestamp_ms()
+
+    await db_provider.try_commit(ss)
+
+    return orm_notification

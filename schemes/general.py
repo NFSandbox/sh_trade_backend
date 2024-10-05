@@ -134,14 +134,14 @@ class PaginationConfig(BaseModel):
         return select_stmt.limit(limit).offset(offset)
 
 
-class PaginationedResult[DType: Any]:
+class PaginatedResult[DType: Any]:
     def __init__(self, total: int, pagination: PaginationConfig, data: DType) -> None:
         self.total = total
         self.pagination = pagination
         self.data = data
 
 
-class PaginationedResultOut[DType: Sequence[BaseModel] | List[BaseModel] | BaseModel](
+class PaginatedResultOut[DType: Sequence[BaseModel] | List[BaseModel] | BaseModel](
     BaseModel
 ):
     total: int

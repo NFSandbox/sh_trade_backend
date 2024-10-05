@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload, Session
 from sqlalchemy.sql import and_
 from sqlalchemy import exc as sqlexc
 
-from fastapi import Body
+from fastapi import Body, Depends
 
 from config import rbac as rbac_config
 

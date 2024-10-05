@@ -50,7 +50,11 @@ from .error import (
     SenderNotTrusted,
 )
 
-__all__ = ["NotificationSender", "log_middleware", "get_notifications"]
+__all__ = [
+    "NotificationSender",
+    "log_middleware",
+    "get_notifications",
+]
 
 
 class NotificationSender:
@@ -219,6 +223,7 @@ async def get_notifications(
     time_desc: bool = True,
     sent: bool = False,
     received: bool = True,
+    ignore_read: bool = False,
     pagination: gene_sche.PaginationConfig | None = None,
 ):
     """
@@ -249,28 +254,32 @@ async def get_notifications(
     received_notification = basic_stmt.join(orm.User.received_notifications)
     # logger.debug((await ss.scalars(received_notification)).all())
 
+    # union sent/received notifications based on param
     selected = []
     if sent:
         selected.append(sent_notification)
     if received:
         selected.append(received_notification)
-
     all_stmt = union_all(*selected).subquery()
     all_notifications = aliased(orm.Notification, all_stmt)
 
     stmt = select(all_notifications)
 
-    total = await ss.scalar(select(func.count(all_notifications.notification_id)))
-
     # order
     if time_desc:
         stmt = stmt.order_by(all_notifications.created_time.desc())
+
+    # ignore read
+    if ignore_read:
+        stmt = stmt.where(all_notifications.read_time == None)
+
+    # calculate total result under the applied criteria
+    total = await ss.scalar(select(func.count(all_notifications.notification_id)))
+    total = total or 0
 
     # pagination
     stmt = pagination.use_on(stmt)
 
     res = (await ss.scalars(stmt)).all()
 
-    return gene_sche.PaginationedResult(
-        total=total or 0, pagination=pagination, data=res
-    )
+    return gene_sche.PaginatedResult(total=total, pagination=pagination, data=res)
