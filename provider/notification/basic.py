@@ -12,10 +12,17 @@ from typing import (
     TypeVar,
 )
 
+from dataclasses import dataclass
+
+from pydantic import BaseModel
+
 from inspect import isawaitable
 
+from asyncer import asyncify
+from asyncio import iscoroutine
+
 from loguru import logger
-from sqlalchemy import select, func, Column, distinct
+from sqlalchemy import select, func, Column, distinct, union_all, union
 from sqlalchemy.orm import selectinload, QueryableAttribute, aliased
 from sqlalchemy.sql import and_, or_
 from sqlalchemy import exc as sqlexc
@@ -28,8 +35,7 @@ from schemes import auth as auth_sche
 from schemes import db as db_sche
 from schemes import general as gene_sche
 
-from asyncer import asyncify
-from asyncio import iscoroutine
+from exception import error as exc
 
 from tools.callback_manager import CallbackManager, CallbackInterrupted
 
@@ -44,7 +50,7 @@ from .error import (
     SenderNotTrusted,
 )
 
-__all__ = ["NotificationSender", "log_middleware"]
+__all__ = ["NotificationSender", "log_middleware", "get_notifications"]
 
 
 class NotificationSender:
@@ -204,4 +210,67 @@ async def log_middleware(sender: NotificationSender):
     assert sender.curr_receiver is not None
     logger.debug(
         f"Notification Sent. {sender.curr_sender.user_id} -> {sender.curr_receiver.user_id}"
+    )
+
+
+async def get_notifications(
+    ss: SessionDep,
+    user: orm.User,
+    time_desc: bool = True,
+    sent: bool = False,
+    received: bool = True,
+    pagination: gene_sche.PaginationConfig | None = None,
+):
+    """
+    Get notifications of a user
+
+    - `time_desc` Order result by sent/received time desc
+    - `sent` `received` Filter by sent/received notifications
+    - `pagination` Pagination config, use default if not provided
+    """
+    # param validation
+    if sent == False and received == False:
+        raise exc.ParamError(
+            param_name="sent, received",
+            message="sent and received param could not both be false",
+        )
+    pagination = pagination or gene_sche.PaginationConfig()
+
+    # basic stmt
+    basic_stmt = (
+        select(orm.Notification)
+        .select_from(orm.User)
+        .where(orm.User.user_id == user.user_id)
+    )
+
+    # sent and received filter
+    sent_notification = basic_stmt.join(orm.User.sent_notifications)
+    # logger.debug((await ss.scalars(sent_notification)).all())
+    received_notification = basic_stmt.join(orm.User.received_notifications)
+    # logger.debug((await ss.scalars(received_notification)).all())
+
+    selected = []
+    if sent:
+        selected.append(sent_notification)
+    if received:
+        selected.append(received_notification)
+
+    all_stmt = union_all(*selected).subquery()
+    all_notifications = aliased(orm.Notification, all_stmt)
+
+    stmt = select(all_notifications)
+
+    total = await ss.scalar(select(func.count(all_notifications.notification_id)))
+
+    # order
+    if time_desc:
+        stmt = stmt.order_by(all_notifications.created_time.desc())
+
+    # pagination
+    stmt = pagination.use_on(stmt)
+
+    res = (await ss.scalars(stmt)).all()
+
+    return gene_sche.PaginationedResult(
+        total=total or 0, pagination=pagination, data=res
     )

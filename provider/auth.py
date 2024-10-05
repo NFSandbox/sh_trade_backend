@@ -147,8 +147,9 @@ async def check_user_permission(
 class PermissionsChecker:
     """
     Encapsulation of check_user_permission with fixed required permissions set.
+    Return a bool value represents the check result. Or raise if `raise_on_fail` is `True`.
 
-    This class could be used as FastAPI dependency:
+    Usage as dependency:
 
         p = Annotated[bool, PermissionsChecker({"read:all", "write:self"})]
 

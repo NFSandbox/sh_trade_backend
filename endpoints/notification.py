@@ -3,6 +3,7 @@ from typing import Annotated, cast, List, Sequence
 
 from loguru import logger
 from fastapi import APIRouter, Query, Depends, Request, Response, status, Body
+from pydantic import BaseModel
 
 from config import system as sys_config
 
@@ -21,6 +22,7 @@ from provider.notification import (
     NotificationSender,
     log_middleware,
     send_to_telegram_callback,
+    get_notifications,
 )
 
 from provider.database import SessionDep
@@ -62,4 +64,52 @@ async def send_notifications(
 
     return await ss.run_sync(
         lambda x: db_sche.NotificationOut.model_validate(orm_notification)
+    )
+
+
+class GetNotificationIn(BaseModel):
+    sent: bool = True
+    received: bool = False
+    time_desc: bool = True
+    pagination: gene_sche.PaginationConfig | None = None
+
+
+class GetNotificationOut(BaseModel):
+    total: int
+    pagination: gene_sche.PaginationConfig
+    data: List[db_sche.NotificationOut]
+
+    class Config:
+        from_attributes = True
+
+
+@notification_router.get(
+    "/get",
+    response_model=gene_sche.PaginationedResultOut[list[db_sche.NotificationOut]],
+    response_model_exclude_none=True,
+)
+async def get_user_notifications(
+    p: Annotated[bool, Depends(PermissionsChecker({"notification:read:self"}))],
+    ss: SessionDep,
+    user: CurrentUserDep,
+    config: Annotated[GetNotificationIn, Body(embed=True)],
+):
+    notification_res = await get_notifications(
+        ss,
+        user,
+        time_desc=config.time_desc,
+        sent=config.sent,
+        received=config.received,
+        pagination=config.pagination,
+    )
+
+    # def valiate_result(ss):
+    #     return gene_sche.PaginationedResultOut[
+    #         list[db_sche.NotificationOut]
+    #     ].model_validate(notification_res)
+
+    return await gene_sche.validate_result(
+        ss,
+        notification_res,
+        gene_sche.PaginationedResultOut[list[db_sche.NotificationOut]],
     )
