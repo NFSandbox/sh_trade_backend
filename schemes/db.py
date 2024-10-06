@@ -8,23 +8,25 @@ from schemes import sql as orm
 from pydantic import BaseModel, Field, PositiveInt
 
 
-class UserOut(BaseModel):
+class DbSchemaBaseModel(BaseModel):
+    class Config:
+        from_attributes = True
+
+
+class UserOut(DbSchemaBaseModel):
     user_id: int
     campus_id: str | None = None
     username: str
     description: str | None = None
     created_time: int
 
-    class Config:
-        from_attributes = True
 
-
-class UserIn(BaseModel):
+class UserIn(DbSchemaBaseModel):
     username: Annotated[str, Field(max_length=20)]
     password: Annotated[str, Field(max_length=20)]
 
 
-class ContactInfoIn(BaseModel):
+class ContactInfoIn(DbSchemaBaseModel):
     """Model used to validate incoming contact info"""
 
     contact_type: orm.ContactInfoType
@@ -33,9 +35,10 @@ class ContactInfoIn(BaseModel):
 
 class ContactInfoOut(ContactInfoIn):
     contact_info_id: int
+    verified: bool
 
 
-class TagOut(BaseModel):
+class TagOut(DbSchemaBaseModel):
     tag_id: int
     tag_type: str
     name: str
@@ -44,7 +47,7 @@ class TagOut(BaseModel):
         from_attributes = True
 
 
-class ItemOut(BaseModel):
+class ItemOut(DbSchemaBaseModel):
     """
     Notes
 
@@ -67,7 +70,7 @@ class ItemOut(BaseModel):
         from_attributes = True
 
 
-class ItemIn(BaseModel):
+class ItemIn(DbSchemaBaseModel):
     name: str = Field(max_length=20)
     description: str = Field(max_length=2000)
     price: PositiveInt
@@ -78,7 +81,7 @@ class ItemInWithId(ItemIn):
     item_id: int
 
 
-class QuestionIn(BaseModel):
+class QuestionIn(DbSchemaBaseModel):
     item_id: int
     asker_id: int | None = None
     question: Annotated[str, Field(max_length=500)]
@@ -86,7 +89,7 @@ class QuestionIn(BaseModel):
     answer: Annotated[str | None, Field(max_length=500)] = None
 
 
-class QuestionOut(BaseModel):
+class QuestionOut(DbSchemaBaseModel):
     question_id: int
     item_id: int
     question: str
@@ -96,7 +99,7 @@ class QuestionOut(BaseModel):
     public: bool
 
 
-class TradeRecordOut(BaseModel):
+class TradeRecordOut(DbSchemaBaseModel):
     trade_id: int
     buyer: UserOut
     item: ItemOut
@@ -113,7 +116,11 @@ class TradeRecordOut(BaseModel):
         from_attributes = True
 
 
-class NotificationContentOut(BaseModel):
+AllowedContentTypeLiteral = Literal["text", "markdown", "url_action"]
+AllowedCategoryLiteral = Literal["basic", "user_msg", "system"]
+
+
+class NotificationContentOut(DbSchemaBaseModel):
     """
     Base pydantic model for Notification.content ORM columns.
 
@@ -124,6 +131,7 @@ class NotificationContentOut(BaseModel):
 
     content_type: Literal["text"] = "text"
 
+    category: str = "basic"
     title: str
     message: str
 
@@ -163,7 +171,7 @@ class URLActionNotificationContentOut(MarkDownNotificationContentOut):
 
     content_type: Literal["url_action"] = "url_action"
 
-    class URLAction(BaseModel):
+    class URLAction(DbSchemaBaseModel):
         """
         Fields
 
@@ -188,7 +196,7 @@ NotificationContentOutUnion = (
 )
 
 
-class NotificationOut(BaseModel):
+class NotificationOut(DbSchemaBaseModel):
     """
     Model for notification info.
 

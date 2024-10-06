@@ -52,9 +52,30 @@ def override_emailpassword_functions(
                         orm_supertoken_user = orm.SuperTokenUser(
                             user=orm_user,
                             supertoken_id=super_token_user_id,
+                            supertoken_contact_info=email,
+                        )
+                        ss.add(orm_supertoken_user)
+
+                        # user ahu-email relationship with verified state
+                        # 
+                        # here notice that the actual email verification control is 
+                        # handled by supertoken recipe.
+                        # 
+                        # If the user email is not verified, the supertoken /signin endpoint 
+                        # should be responsible to return a 403 and not returning session 
+                        # tokens. So even if here we marked the email verified, user should 
+                        # still not be able to login to system until they finished the email 
+                        # verification and the email verification state updated in supertoken 
+                        # system.
+                        ahu_contact_info = orm.ContactInfo(
+                            user=orm_user,
+                            contact_type=orm.ContactInfoType.ahuemail,
+                            contact_info=email,
+                            verified=True,
                         )
 
-                        ss.add(orm_supertoken_user)
+                        ss.add(ahu_contact_info)
+
             except Exception as e:
                 raise RuntimeError(
                     "Supertoken successfully handle user sign-up request, "
@@ -95,53 +116,53 @@ def override_emailpassword_functions(
     return original_implementation
 
 
-# def override_thirdparty_functions(
-#     original_implementation: ThirdPartyRecipeInterface,
-# ) -> ThirdPartyRecipeInterface:
-#     original_thirdparty_sign_in_up = original_implementation.sign_in_up
+def override_thirdparty_functions(
+    original_implementation: ThirdPartyRecipeInterface,
+) -> ThirdPartyRecipeInterface:
+    original_thirdparty_sign_in_up = original_implementation.sign_in_up
 
-#     async def thirdparty_sign_in_up(
-#         third_party_id: str,
-#         third_party_user_id: str,
-#         email: str,
-#         oauth_tokens: Dict[str, Any],
-#         raw_user_info_from_provider: RawUserInfoFromProvider,
-#         tenant_id: str,
-#         user_context: Dict[str, Any],
-#     ):
-#         result = await original_thirdparty_sign_in_up(
-#             third_party_id,
-#             third_party_user_id,
-#             email,
-#             oauth_tokens,
-#             raw_user_info_from_provider,
-#             tenant_id,
-#             user_context,
-#         )
+    async def thirdparty_sign_in_up(
+        third_party_id: str,
+        third_party_user_id: str,
+        email: str,
+        oauth_tokens: Dict[str, Any],
+        raw_user_info_from_provider: RawUserInfoFromProvider,
+        tenant_id: str,
+        user_context: Dict[str, Any],
+    ):
+        result = await original_thirdparty_sign_in_up(
+            third_party_id,
+            third_party_user_id,
+            email,
+            oauth_tokens,
+            raw_user_info_from_provider,
+            tenant_id,
+            user_context,
+        )
 
-#         # user object contains the ID and email of the user
-#         user = result.user
-#         print(user)
+        # user object contains the ID and email of the user
+        user = result.user
+        print(user)
 
-#         # This is the response from the OAuth 2 provider that contains their tokens or user info.
-#         provider_access_token = result.oauth_tokens["access_token"]
-#         print(provider_access_token)
+        # This is the response from the OAuth 2 provider that contains their tokens or user info.
+        provider_access_token = result.oauth_tokens["access_token"]
+        print(provider_access_token)
 
-#         if result.raw_user_info_from_provider.from_user_info_api is not None:
-#             first_name = result.raw_user_info_from_provider.from_user_info_api[
-#                 "first_name"
-#             ]
-#             print(first_name)
+        if result.raw_user_info_from_provider.from_user_info_api is not None:
+            first_name = result.raw_user_info_from_provider.from_user_info_api[
+                "first_name"
+            ]
+            print(first_name)
 
-#         if result.created_new_user:
-#             print("New user was created")
-#             # TODO: Post sign up logic
-#         else:
-#             print("User already existed and was signed in")
-#             # TODO: Post sign in logic
+        if result.created_new_user:
+            print("New user was created")
+            # TODO: Post sign up logic
+        else:
+            print("User already existed and was signed in")
+            # TODO: Post sign in logic
 
-#         return result
+        return result
 
-#     original_implementation.sign_in_up = thirdparty_sign_in_up
+    original_implementation.sign_in_up = thirdparty_sign_in_up
 
-#     return original_implementation
+    return original_implementation

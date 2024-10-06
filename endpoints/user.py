@@ -69,7 +69,7 @@ async def update_description(
 
 @user_router.post(
     "/contact_info/add",
-    response_model=db_sche.ContactInfoIn,
+    response_model=db_sche.ContactInfoOut,
     responses=exc.openApiErrorMark({409: "Contact Already Used"}),
 )
 async def add_contact_info(
@@ -80,10 +80,10 @@ async def add_contact_info(
     uew_contact_info = await user_provider.add_contact_info(ss, current_user, info)
     await ss.commit()
 
-    return info
+    return uew_contact_info
 
 
-@user_router.get("/contact_info", response_model=List[db_sche.ContactInfoIn])
+@user_router.get("/contact_info", response_model=List[db_sche.ContactInfoOut])
 async def get_contact_info(
     ss: SessionDep,
     current_user: user_provider.CurrentUserDep,

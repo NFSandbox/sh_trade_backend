@@ -107,7 +107,24 @@ class User(SQLBaseModel):
     buys: Mapped[List["TradeRecord"]] = relationship(
         back_populates="buyer", foreign_keys="TradeRecord.buyer_id"
     )
+
+    # contact info relationships
     contact_info: Mapped[List["ContactInfo"]] = relationship(back_populates="user")
+    """
+    All contact info (including internal) of this user
+    """
+    external_contact_info: Mapped[List["ContactInfo"]] = relationship(
+        "ContactInfo",
+        primaryjoin="and_(User.user_id==ContactInfo.user_id, ContactInfo.internal==False)",
+        viewonly=True,
+    )
+    ahu_email: Mapped["ContactInfo"] = relationship(
+        "ContactInfo",
+        primaryjoin="and_(User.user_id==ContactInfo.user_id, ContactInfo.contact_type=='ahuemail')",
+        viewonly=True,
+    )
+
+    # user-owned item relationship
     items: Mapped[List["Item"]] = relationship(back_populates="seller")
 
     # user-role associations
@@ -188,6 +205,8 @@ class SuperTokenUser(SQLBaseModel):
 
     user_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
     supertoken_id: Mapped[LongString] = mapped_column(primary_key=True)
+    supertoken_contact_info: Mapped[LongString]
+    pending: Mapped[bool] = mapped_column(default=False)
     created_time: Mapped[TimeStamp]
 
     user: Mapped["User"] = relationship(
@@ -198,6 +217,9 @@ class SuperTokenUser(SQLBaseModel):
 class ContactInfoType(Enum):
     phone = "phone"
     email = "email"
+    ahuemail = "ahuemail"
+    qq = "qq"
+    wechat = "wechat"
     telegram = "telegram"
 
 
@@ -209,6 +231,8 @@ class ContactInfo(SQLBaseModel):
     user_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
     contact_type: Mapped[ContactInfoType] = mapped_column()
     contact_info: Mapped[LongString] = mapped_column()
+    verified: Mapped[bool] = mapped_column(default=False)
+    internal: Mapped[bool] = mapped_column(default=False)
 
     user: Mapped["User"] = relationship(back_populates="contact_info")
 
