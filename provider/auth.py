@@ -115,25 +115,37 @@ async def check_user_permission(
 
     Check passed only if the user has ALL permissions required in `required_permissions` set.
 
+    This function could be depended by other providers to check user permission.
     To use permission check as dependency, check out `PermissionsChecker`
+    
+    Raises
+    
+    - `permission_required`
     """
     role_set = set()
+
     # get user role set if user logged in
     if user is not None:
 
         def get_role_set(ss: Session):
+            """
+            Return name list of the role that this user have,
+            also attach SIGNED_IN_ROLE in config if exists
+            """
             ret_set = set(user.role_name_list)
             if rbac_config.SIGNED_IN_ROLE is not None:
                 ret_set.add(rbac_config.SIGNED_IN_ROLE)
             return ret_set
 
         role_set = await ss.run_sync(get_role_set)
+
     # else use guest role
     elif rbac_config.GUEST_ROLE is not None:
         role_set = {rbac_config.GUEST_ROLE}
     else:
         role_set = set()
 
+    # use rbac manager instance in this module to check user permission
     for role in role_set:
         try:
             _rbac_manager.check_role_has_all_permissions(role, required_permissions)

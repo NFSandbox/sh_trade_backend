@@ -13,6 +13,7 @@ from schemes import sql as orm
 
 from provider import user as user_provider
 from provider import database as db_provider
+from provider.database import try_commit
 from provider import item as item_provider
 from provider import fav as fav_provider
 from provider.user import CurrentUserDep, CurrentUserOrNoneDep
@@ -24,6 +25,7 @@ from provider.notification import (
     send_to_telegram_callback,
     get_notifications,
     get_notification_by_id,
+    check_user_could_read_notification,
 )
 
 from provider.database import SessionDep
@@ -103,6 +105,7 @@ async def get_user_notifications(
         sent=config.sent,
         received=config.received,
         pagination=config.pagination,
+        ignore_read=config.ignore_read,
     )
 
     # def valiate_result(ss):
@@ -115,6 +118,37 @@ async def get_user_notifications(
         notification_res,
         gene_sche.PaginatedResultOut[list[db_sche.NotificationOut]],
     )
+
+
+@notification_router.get(
+    "/get_by_id",
+    response_model=db_sche.NotificationOut,
+)
+async def get_user_notification_by_id(
+    p: Annotated[bool, Depends(PermissionsChecker({"notification:read:self"}))],
+    p_read_all: Annotated[
+        bool,
+        Depends(PermissionsChecker({"notification:read:all"}, raise_on_fail=False)),
+    ],
+    ss: SessionDep,
+    user: CurrentUserDep,
+    notification_id: int,
+):
+    """
+    Get one notification using `notification_id`
+
+    Raises
+
+    - `no_result`
+    - `permission_required`
+    """
+    # get notification orm instance
+    orm_n = await get_notification_by_id(ss, notification_id=notification_id)
+
+    # permission check
+    await check_user_could_read_notification(ss, user=user, notification=orm_n)
+
+    return await gene_sche.validate_result(ss, orm_n, db_sche.NotificationOut)
 
 
 @notification_router.post("/read", response_model=db_sche.NotificationOut)
@@ -146,3 +180,33 @@ async def mark_notification_read(
     await db_provider.try_commit(ss)
 
     return orm_notification
+
+
+@notification_router.post("/read_all", response_model=gene_sche.BulkOpeartionInfo)
+async def read_all_notifications(
+    p: Annotated[bool, Depends(PermissionsChecker({"notification:read_all:self"}))],
+    ss: SessionDep,
+    user: CurrentUserDep,
+):
+    """
+    Mark all notifications as read of current signed in user.
+
+    Return `BulkOpeartionInfo` recording how many notifications has been read
+    """
+
+    count = gene_sche.BulkOpeartionInfo(operation="Read received notifications")
+
+    # sync function to mark all received notification as read
+    # notice: not sure if there will be any problem that we changing read_time while
+    # iterating `received_notifications`
+    def _mark_all_read(ss):
+        nonlocal count
+        for n in user.received_notifications:
+            if n.read_time is None:
+                n.read_time = orm.get_current_timestamp_ms()
+                count.inc()
+
+    await ss.run_sync(_mark_all_read)
+    await try_commit(ss)
+
+    return count

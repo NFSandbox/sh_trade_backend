@@ -41,6 +41,7 @@ from tools.callback_manager import CallbackManager, CallbackInterrupted
 
 from ..database import init_session_maker, session_maker, SessionDep, try_commit
 from ..user.core import get_user_contact_info_count
+from ..auth import check_user_permission
 
 from .error import (
     NotificationError,
@@ -54,6 +55,7 @@ __all__ = [
     "NotificationSender",
     "log_middleware",
     "get_notifications",
+    "check_user_could_read_notification",
 ]
 
 
@@ -283,3 +285,47 @@ async def get_notifications(
     res = (await ss.scalars(stmt)).all()
 
     return gene_sche.PaginatedResult(total=total, pagination=pagination, data=res)
+
+
+async def check_user_could_read_notification(
+    ss: AsyncSession, user: orm.User, notification: orm.Notification
+) -> None:
+    """
+    Check if a user has the permission to read a notification
+
+    Checks:
+
+    - If notification has been deleted
+    - If user has read:all permission on notification
+    - If user is sender or receiver
+
+    Raises
+
+    - `permission_required`
+    """
+    # not exists
+    if notification.deleted_at is not None:
+        raise exc.NoResultError(
+            message=f"The notification with id {notification.notification_id} is not exists"
+        )
+
+    # first check if user has read all permission
+    try:
+        # if user has read all permission, check pass and return
+        p_read_all: bool = await check_user_permission(
+            ss, user, {"notification:read:all"}
+        )
+        return
+    except:
+        pass
+
+    # check pass if user is sender or receiver
+    if (
+        notification.sender_id == user.user_id
+        or notification.receiver_id == user.user_id
+    ):
+        return
+
+    raise exc.PermissionError(
+        message=f"Insufficient permission to read notification with id {notification.notification_id}"
+    )

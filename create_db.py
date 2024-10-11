@@ -118,6 +118,12 @@ DEFAULT_USERS = [
             {"id": "password", "value": "Asd123123"},
         ]
     },
+    {
+        "formFields": [
+            {"id": "email", "value": "test3@stu.ahu.edu.cn"},
+            {"id": "password", "value": "Asd123123"},
+        ]
+    },
 ]
 
 DEFAULT_ROLES = [
