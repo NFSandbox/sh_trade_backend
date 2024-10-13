@@ -131,9 +131,9 @@ async def get_user_from_user_id(
 
 async def get_user_contact_info_count(ss: SessionDep, user: orm.User):
     """
-    Return count of user contact info
+    Return count of user contact info (internal contact info excluded)
     """
-    count = await ss.run_sync(lambda x: len(user.contact_info))
+    count = await ss.run_sync(lambda x: len(user.external_contact_info))
     return count
 
 

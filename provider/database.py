@@ -6,7 +6,7 @@ from loguru import logger
 from fastapi import Depends
 
 from sqlalchemy import Select, select
-from sqlalchemy.orm import MappedColumn, selectinload, QueryableAttribute
+from sqlalchemy.orm import MappedColumn, selectinload, QueryableAttribute, Session
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
 from config import sql

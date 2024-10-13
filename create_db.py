@@ -118,6 +118,12 @@ DEFAULT_USERS = [
             {"id": "password", "value": "Asd123123"},
         ]
     },
+    {
+        "formFields": [
+            {"id": "email", "value": "test3@stu.ahu.edu.cn"},
+            {"id": "password", "value": "Asd123123"},
+        ]
+    },
 ]
 
 DEFAULT_ROLES = [
@@ -173,7 +179,16 @@ async def add_default_data():
                 orm.ContactInfo(
                     contact_type=orm.ContactInfoType.email,
                     contact_info="nf@nfblogs.com",
-                )
+                    verified=True,
+                ),
+            )
+            contact_info.append(
+                orm.ContactInfo(
+                    contact_type=orm.ContactInfoType.telegram,
+                    contact_info="975140440",
+                    internal=True,
+                    verified=True,
+                ),
             )
         # auto commit
     # auto close ss

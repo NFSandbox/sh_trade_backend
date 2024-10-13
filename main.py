@@ -5,6 +5,11 @@ from fastapi.responses import JSONResponse
 from fastapi.requests import Request
 from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.exception_handlers import http_exception_handler
+from fastapi.openapi.utils import get_openapi
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+from fastapi.datastructures import URL
 
 from supertokens_python.framework.fastapi import get_middleware
 from provider import supertokens
@@ -12,7 +17,7 @@ from provider import supertokens
 import uvicorn
 from loguru import logger
 
-from exception.error import BaseError, BaseErrorOut
+from exception.error import BaseError, BaseErrorOut, InternalServerError
 
 import config
 
@@ -22,6 +27,7 @@ from endpoints.user import user_router
 from endpoints.item import item_router
 from endpoints.fav import fav_router
 from endpoints.trade import trade_router
+from endpoints.notification import notification_router
 
 # CORS Middleware
 middlewares = [
@@ -46,6 +52,10 @@ app.include_router(user_router, prefix="/user", tags=["User"])
 app.include_router(item_router, prefix="/item", tags=["Item"])
 app.include_router(fav_router, prefix="/fav", tags=["Favourite"])
 app.include_router(trade_router, prefix="/trade", tags=["Trade"])
+app.include_router(notification_router, prefix="/notification", tags=["Notification"])
+
+# mount static files
+app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
 
 @app.exception_handler(RequestValidationError)
@@ -75,10 +85,21 @@ async def base_error_handler(request: Request, e: BaseError):
 
     BaseError is a custom base class for error raised in this application.
     """
+    # replace error if the error is from serverside.
+    # this is to prevent unexpected info leak from server
+    error_to_client = e
+
+    if e.status >= 500:
+        logger.exception(e)
+        error_to_client = InternalServerError()
+    else:
+        logger.error(e)
+
     return await http_exception_handler(
         request,
         HTTPException(
-            status_code=200, detail=e.to_pydantic_base_error().model_dump()
+            status_code=200,
+            detail=error_to_client.to_pydantic_base_error().model_dump(),
         ),
     )
 
@@ -93,15 +114,44 @@ async def internal_error_handler(request: Request, e: Exception):
         request,
         HTTPException(
             status_code=500,
-            detail=BaseError(
-                name="internal_server_error",
-                message="An error occurred in server-side. If error persists, please contact website admin",
-                status=500,
-            )
-            .to_pydantic_base_error()
-            .model_dump(),
+            detail=InternalServerError().to_pydantic_base_error().model_dump(),
         ),
     )
+
+
+# modify openapi settings
+def get_custom_openapi_schema():
+    openapi_schema = get_openapi(
+        title="AHUER.COM API Services",
+        description="The backend API services interative docs for [AHUER.COM](https://ahuer.com)",
+        version=config.general.BACKEND_API_VER,
+        routes=app.routes,
+    )
+    openapi_schema["info"]["x-logo"] = {
+        "url": f"{config.general.GET_BACKEND_URL()}/assets/icon.png",
+    }
+
+    return openapi_schema
+
+
+app.openapi = get_custom_openapi_schema
+
+
+@app.get("/doc", include_in_schema=False)
+async def swagger_ui_html():
+    logger.debug("Custom docs page loaded")
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title="AHUER.COM API Services",
+        swagger_favicon_url=f"{config.general.GET_BACKEND_URL()}/assets/icon.png",
+    )
+
+
+@app.get("/", include_in_schema=False)
+async def redirect_to_doc():
+    if config.general.is_dev():
+        return RedirectResponse(f"{config.general.GET_BACKEND_URL()}/doc")
+    return RedirectResponse("https://doc.api.ahuer.com")
 
 
 # Start uvicorn server

@@ -10,7 +10,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 # sqlalchemy basics
-from sqlalchemy import Select, BIGINT, String, ForeignKey, Column, Table
+from sqlalchemy import Select, BIGINT, String, JSON, ForeignKey, Column, Table
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -29,6 +29,9 @@ from sqlalchemy.ext.associationproxy import AssociationProxy
 # easy soft delete
 from sqlalchemy_easy_softdelete.mixin import generate_soft_delete_mixin_class
 from sqlalchemy_easy_softdelete.hook import IgnoredTable
+
+# sqlalchemy json
+from sqlalchemy_json import NestedMutableJson
 
 
 # using datetime to get utc timestamp
@@ -88,6 +91,7 @@ class AssociationUserRole(SQLBaseModel):
 
     user: Mapped["User"] = relationship(back_populates="association_roles")
     role: Mapped["Role"] = relationship(back_populates="association_users")
+    role_name: AssociationProxy[str] = association_proxy("role", "role_name")
 
 
 class User(SQLBaseModel):
@@ -103,7 +107,24 @@ class User(SQLBaseModel):
     buys: Mapped[List["TradeRecord"]] = relationship(
         back_populates="buyer", foreign_keys="TradeRecord.buyer_id"
     )
+
+    # contact info relationships
     contact_info: Mapped[List["ContactInfo"]] = relationship(back_populates="user")
+    """
+    All contact info (including internal) of this user
+    """
+    external_contact_info: Mapped[List["ContactInfo"]] = relationship(
+        "ContactInfo",
+        primaryjoin="and_(User.user_id==ContactInfo.user_id, ContactInfo.internal==False)",
+        viewonly=True,
+    )
+    ahu_email: Mapped["ContactInfo"] = relationship(
+        "ContactInfo",
+        primaryjoin="and_(User.user_id==ContactInfo.user_id, ContactInfo.contact_type=='ahuemail')",
+        viewonly=True,
+    )
+
+    # user-owned item relationship
     items: Mapped[List["Item"]] = relationship(back_populates="seller")
 
     # user-role associations
@@ -114,6 +135,10 @@ class User(SQLBaseModel):
         "association_roles",
         "role",
         creator=lambda role_orm: AssociationUserRole(role=role_orm),
+    )
+    role_name_list: AssociationProxy[List[str]] = association_proxy(
+        "association_roles",
+        "role_name",
     )
 
     # relation about fav items
@@ -128,6 +153,16 @@ class User(SQLBaseModel):
 
     # super token id relationship
     supertoken_ids: Mapped[List["SuperTokenUser"]] = relationship(back_populates="user")
+
+    # notification relationship
+    sent_notifications: Mapped[List["Notification"]] = relationship(
+        "Notification", back_populates="sender", foreign_keys="Notification.sender_id"
+    )
+    received_notifications: Mapped[List["Notification"]] = relationship(
+        "Notification",
+        back_populates="receiver",
+        foreign_keys="Notification.receiver_id",
+    )
 
     async def verify_role(self, ss: AsyncSession, roles: str | list[str]) -> bool:
         """Check if this user has some roles
@@ -170,6 +205,8 @@ class SuperTokenUser(SQLBaseModel):
 
     user_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
     supertoken_id: Mapped[LongString] = mapped_column(primary_key=True)
+    supertoken_contact_info: Mapped[LongString]
+    pending: Mapped[bool] = mapped_column(default=False)
     created_time: Mapped[TimeStamp]
 
     user: Mapped["User"] = relationship(
@@ -180,6 +217,10 @@ class SuperTokenUser(SQLBaseModel):
 class ContactInfoType(Enum):
     phone = "phone"
     email = "email"
+    ahuemail = "ahuemail"
+    qq = "qq"
+    wechat = "wechat"
+    telegram = "telegram"
 
 
 class ContactInfo(SQLBaseModel):
@@ -190,6 +231,8 @@ class ContactInfo(SQLBaseModel):
     user_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
     contact_type: Mapped[ContactInfoType] = mapped_column()
     contact_info: Mapped[LongString] = mapped_column()
+    verified: Mapped[bool] = mapped_column(default=False)
+    internal: Mapped[bool] = mapped_column(default=False)
 
     user: Mapped["User"] = relationship(back_populates="contact_info")
 
@@ -385,4 +428,27 @@ class Role(SQLBaseModel):
         "association_users",
         "user",
         creator=lambda user_orm: AssociationUserRole(user=user_orm),
+    )
+
+
+class Notification(SQLBaseModel):
+
+    __tablename__ = "notification"
+
+    notification_id: Mapped[IntPrimaryKey] = mapped_column(autoincrement=True)
+
+    sender_id: Mapped[int] = mapped_column(
+        ForeignKey("user.user_id"), nullable=True, default=None
+    )
+    receiver_id: Mapped[int] = mapped_column(ForeignKey("user.user_id"))
+    created_time: Mapped[TimeStamp]
+    read_time: Mapped[NullableTimeStamp]
+    content: Mapped[dict] = mapped_column(NestedMutableJson)
+
+    # relationships
+    sender: Mapped["User | None"] = relationship(
+        back_populates="sent_notifications", foreign_keys=sender_id
+    )
+    receiver: Mapped["User"] = relationship(
+        back_populates="received_notifications", foreign_keys=receiver_id
     )

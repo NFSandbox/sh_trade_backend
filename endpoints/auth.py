@@ -12,7 +12,10 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import HTTPException
 
 from supertokens_python.recipe.emailpassword.asyncio import sign_in, sign_up
-from supertokens_python.recipe.emailpassword.interfaces import SignInOkResult, SignInWrongCredentialsError
+from supertokens_python.recipe.emailpassword.interfaces import (
+    SignInOkResult,
+    SignInWrongCredentialsError,
+)
 
 from sqlalchemy.exc import MultipleResultsFound
 
@@ -153,6 +156,20 @@ async def get_current_user_info(
     user: user_provider.CurrentUserDep,
 ):
     return user
+
+
+@auth_router.post("/test/rbac")
+async def test_rbac_permissions(
+    p: Annotated[bool, Depends(auth_provider.PermissionsChecker({"rbac:test"}))],
+    ss: db_provider.SessionDep,
+    user: auth_provider.CurrentUserDep,
+    permissions: Annotated[
+        set[auth_provider.rbac_config.AllowedPermissionsLiteral], Body(embed=True)
+    ],
+):
+    await auth_provider.check_user_permission(
+        ss=ss, user=user, required_permissions=permissions
+    )
 
 
 @auth_router.post("/register", response_model=db_sche.UserOut, deprecated=True)

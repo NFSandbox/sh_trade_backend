@@ -2,11 +2,15 @@
 Declare models uses as util data structures in API I/O
 """
 
+from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Collection, Annotated
+from typing import Collection, Annotated, Any, Dict, List, Sequence, cast
+from dataclasses import dataclass
+
 from pydantic import BaseModel, NonNegativeInt, PositiveInt
 
 from sqlalchemy.sql import Select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .sql import TradeState
 
@@ -114,7 +118,7 @@ class PaginationConfig(BaseModel):
     # zero-index page number
     index: Annotated[int, NonNegativeInt] = 0
 
-    def use_on(self, select_stmt: Select):
+    def use_on[T: Select](self, select_stmt: T) -> T:
         """
         Apply this pagination config to a statement object, then return a new select
 
@@ -123,8 +127,52 @@ class PaginationConfig(BaseModel):
             stmt: Select
             config: PaginationConfig
             stmt = config.use_on(stmt)
-        
+
         """
         offset = self.size * self.index
         limit = self.size
         return select_stmt.limit(limit).offset(offset)
+
+
+class PaginatedResult[DType: Any]:
+    def __init__(self, total: int, pagination: PaginationConfig, data: DType) -> None:
+        self.total = total
+        self.pagination = pagination
+        self.data = data
+
+
+class PaginatedResultOut[DType: Sequence[BaseModel] | List[BaseModel] | BaseModel](
+    BaseModel
+):
+    total: int
+    pagination: PaginationConfig
+    data: DType
+
+    class Config:
+        from_attributes = True
+
+
+async def validate_result[ClsType](ss: AsyncSession, data, cls: ClsType):
+    """
+    Automatically validate the result in an SQLAlchemy sync session.
+
+    - `ss` The session used to execute `run_sync`
+    - `data` The data to be validated. If its a ORM class instance, then this instance must
+      be bound to the received `ss`, otherwise will cause error
+    - `cls` The output type of the data, must inherited from Pydantic `BaseModel`
+
+    Note:
+
+    - If the `data` is ORM
+    """
+    # check attributes
+    if not hasattr(cls, "model_validate"):
+        raise Exception(
+            "Could only validated to type which has 'model_validate' method"
+        )
+
+    # validate
+    res: ClsType = await ss.run_sync(lambda x: cls.model_validate(data, from_attributes=True))  # type: ignore
+
+    # return
+    return res

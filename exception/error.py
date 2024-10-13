@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Any, Collection
 from fastapi import status as httpstatus
 from pydantic import BaseModel
 
@@ -28,33 +28,58 @@ class BaseError(Exception):
         return BaseErrorOut.from_base_error(self)
 
 
+class InternalServerError(BaseError):
+    """
+    Raise when internal server error occurred
+
+    The status code passed to this error should >= 500, if not,
+    the init method will set to 500 forcefully.
+    """
+
+    def __init__(
+        self,
+        name: str = "internal_server_error",
+        message: str = "An error occurred in server-side. If error persists, please contact website admin",
+        status: int = 500,
+    ) -> None:
+        # should not have http status code less then 500
+        if status < 500:
+            status = 500
+
+        super().__init__(
+            name=name,
+            message=message,
+            status=status,
+        )
+
+
 class PermissionError(BaseError):
     """
     Raise when permission error occurred
-    
-    Could automatically adding stringified roles info if `roles` provided
+
+    - `roles` The roles used when verifying permissions
+    - `permissions` The permissions required by this operations
+
+    Both of they should be list of printable object
     """
+
     def __init__(
         self,
-        roles: list[orm.Role] | None = None,
         name: str = "permission_required",
-        message: str | None = None,
+        roles: Collection[Any] | None = None,
+        permissions: Collection[Any] | None = None,
+        message: str = "Insufficient to perform this operation. ",
     ) -> None:
-        # determine message
-        final_message = "You don't have the permission to perform this operation."
-        if message is not None:
-            final_message = message
 
-        # appending roles info if provided
-        if roles is not None and len(roles) > 0:
-            final_message += f" Current roles: "
-            for role in roles:
-                final_message += f"{role.role_title}({role.role_name}) "
+        if roles is not None:
+            message += f"Provided roles: {roles}. "
+        if permissions is not None:
+            message += f"Required permissions: {permissions}. "
 
         super().__init__(
             name=name,
             status=httpstatus.HTTP_403_FORBIDDEN,
-            message=final_message,
+            message=message,
         )
 
 

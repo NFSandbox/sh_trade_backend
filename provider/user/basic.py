@@ -214,7 +214,7 @@ async def get_user_contact_info_list(ss: SessionDep, user: orm.User):
     stmt = (
         select(orm.ContactInfo)
         .select_from(orm.User)
-        .join(orm.User.contact_info.and_(orm.User.user_id == user.user_id))
+        .join(orm.User.external_contact_info.and_(orm.User.user_id == user.user_id))
     )
 
     contact_list = await ss.scalars(stmt)
