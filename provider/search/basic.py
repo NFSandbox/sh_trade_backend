@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 import asyncstdlib as alib
 
@@ -49,6 +50,22 @@ from ..database import (
 )
 from ..user.core import get_user_contact_info_count
 from ..auth import check_user_permission
+
+
+class SearchFilterConfig:
+    filter_key_value_regex = re.compile(
+        r"(?P<key>[\w-]+?):(?P<value>.*?(?=\s|$))", re.VERBOSE
+    )
+    """
+    Regex that could match a single filter key-value pair in query.
+    # TODO
+    """
+
+    def __init__(self, search_query: str) -> None:
+        self.search_query = search_query.strip()
+
+    async def _extract_filters_info(self):
+        pass
 
 
 class Searcher:

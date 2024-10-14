@@ -440,9 +440,6 @@ async def cancel_transaction(
     if commit:
         await try_commit(ss)
 
-    # todo
-    # add endpoints function that exploit this function
-    # testing
     return trade
 
 

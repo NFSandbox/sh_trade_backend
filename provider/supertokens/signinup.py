@@ -156,10 +156,10 @@ def override_thirdparty_functions(
 
         if result.created_new_user:
             print("New user was created")
-            # TODO: Post sign up logic
+            # Post sign up logic
         else:
             print("User already existed and was signed in")
-            # TODO: Post sign in logic
+            # Post sign in logic
 
         return result
 

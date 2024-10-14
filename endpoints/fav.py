@@ -72,8 +72,3 @@ async def remove_all_favourite_items(ss: SessionDep, user: CurrentUserDep):
     Remove all fav items from user, return `BulkOpeartionInfo`
     """
     return await fav_provider.remove_fav_items_of_user(ss, user, item_id_list=None)
-
-
-# todo
-# remove fav
-# remove fav when remove item (cascade)
