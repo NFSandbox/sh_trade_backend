@@ -12,12 +12,14 @@ from fastapi.responses import RedirectResponse
 from fastapi.datastructures import URL
 
 from supertokens_python.framework.fastapi import get_middleware
+from supertokens_python import get_all_cors_headers
 from provider import supertokens
 
 import uvicorn
 from loguru import logger
 
 from exception.error import BaseError, BaseErrorOut, InternalServerError
+from exception.error_handler import add_exception_handlers
 
 import config
 
@@ -30,23 +32,19 @@ from endpoints.trade import trade_router
 from endpoints.notification import notification_router
 from endpoints.search import search_router
 
-# CORS Middleware
-middlewares = [
-    # for more info about supertoken middleware, check out:
-    # https://supertokens.com/docs/thirdpartyemailpassword/custom-ui/init/backend#4-add-the-supertokens-apis--cors-setup
-    # CORS Middleware
-    Middleware(get_middleware()),
-    Middleware(
-        CORSMiddleware,
-        allow_origins=config.general.ALLOWED_ORIGINS,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    ),
-]
 
 # include sub routers
-app = FastAPI(middleware=middlewares)
+app = FastAPI()
+
+# middlewares
+app.add_middleware(get_middleware())
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=config.general.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["Content-Type"] + get_all_cors_headers(),
+)
 app.include_router(token_router, tags=["Token"])
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(user_router, prefix="/user", tags=["User"])
@@ -59,66 +57,8 @@ app.include_router(search_router, prefix="/search", tags=["Search"])
 # mount static files
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request, e):
-    e = e.errors()
-    first_exc = e[0]
-    logger.error(first_exc)
-    return await http_exception_handler(
-        request,
-        HTTPException(
-            status_code=422,
-            detail=BaseError(
-                name="validation_error",
-                message=f"{first_exc['msg']}. Location: {first_exc['loc']}. ({first_exc['type']})",
-                status=422,
-            )
-            .to_pydantic_base_error()
-            .model_dump(),
-        ),
-    )
-
-
-@app.exception_handler(BaseError)
-async def base_error_handler(request: Request, e: BaseError):
-    """
-    An error handler used to handle all subclass of BaseError class.
-
-    BaseError is a custom base class for error raised in this application.
-    """
-    # replace error if the error is from serverside.
-    # this is to prevent unexpected info leak from server
-    error_to_client = e
-
-    if e.status >= 500:
-        logger.exception(e)
-        error_to_client = InternalServerError()
-    else:
-        logger.error(e)
-
-    return await http_exception_handler(
-        request,
-        HTTPException(
-            status_code=200,
-            detail=error_to_client.to_pydantic_base_error().model_dump(),
-        ),
-    )
-
-
-@app.exception_handler(Exception)
-async def internal_error_handler(request: Request, e: Exception):
-    """
-    Default error handler, deal with errors that not been caught by previous two handlers
-    """
-    logger.exception(e)
-    return await http_exception_handler(
-        request,
-        HTTPException(
-            status_code=500,
-            detail=InternalServerError().to_pydantic_base_error().model_dump(),
-        ),
-    )
+# add exceptions handlers
+add_exception_handlers(app)
 
 
 # modify openapi settings
@@ -136,7 +76,7 @@ def get_custom_openapi_schema():
     return openapi_schema
 
 
-app.openapi = get_custom_openapi_schema
+app.openapi = get_custom_openapi_schema  # type: ignore
 
 
 @app.get("/doc", include_in_schema=False)

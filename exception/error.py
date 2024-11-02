@@ -88,6 +88,7 @@ class BaseErrorOut(BaseModel):
     Class that used to convert BaseError to a pydantic class that could be passed to frontend through API.
     """
 
+    error: Literal[True] = True
     name: str
     message: str
     status: int

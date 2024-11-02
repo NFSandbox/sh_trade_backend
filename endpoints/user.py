@@ -10,6 +10,7 @@ from schemes import db as db_sche
 from schemes import general as gene_sche
 from schemes import sql as orm
 
+from provider.auth import PermissionsChecker
 from provider import user as user_provider
 from provider.user import CurrentUserDep, CurrentUserOrNoneDep
 from provider import database as db_provider
@@ -18,6 +19,15 @@ from exception import error as exc
 
 
 user_router = APIRouter()
+
+
+@user_router.get("/me", response_model=db_sche.UserOut)
+async def get_me_info(
+    ss: SessionDep,
+    user: CurrentUserDep,
+    p: Annotated[bool, Depends(PermissionsChecker({"user:me"}))],
+):
+    return await gene_sche.validate_result(ss, user, db_sche.UserOut)
 
 
 @user_router.post(
