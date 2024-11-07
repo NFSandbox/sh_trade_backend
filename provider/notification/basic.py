@@ -25,13 +25,10 @@ from loguru import logger
 from sqlalchemy import select, func, Column, distinct, union_all, union
 from sqlalchemy.orm import selectinload, QueryableAttribute, aliased
 from sqlalchemy.sql import and_, or_
-from sqlalchemy import exc as sqlexc
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from config import system as sys_conf
-
 from schemes import sql as orm
-from schemes import auth as auth_sche
 from schemes import db as db_sche
 from schemes import general as gene_sche
 
@@ -72,7 +69,7 @@ class NotificationSender:
     - `receiver` The default receiver of the message
     - `session` The default session used when adding notification to database
 
-    Do not directly write attributes other then the listed ones.
+    Do not directly write attributes other than the listed ones.
     """
 
     callback_manager = CallbackManager[
@@ -118,13 +115,18 @@ class NotificationSender:
         # in order to control the behaviour of next send
         #
         # notice these variable only valid while `send()` being called.
-        self.curr_sender = None
-        self.curr_receiver = None
-        self.curr_content = None
-        self.curr_session = None
-        self.curr_orm_notification = None
+        self.curr_sender: orm.User | None = None
+        self.curr_receiver: orm.User | None = None
+        self.curr_content: db_sche.NotificationContentOut | None = None
+        self.curr_session: AsyncSession | None = None
+        self.curr_orm_notification: orm.Notification | None = None
 
     def check_validity(self):
+        """
+        Check the validity based on the current state of temporary values.
+        
+        Should be called after init_curr(), since the check based on tmp values.
+        """
         if self.curr_content is None or not isinstance(
             self.curr_content, db_sche.NotificationContentOut
         ):
@@ -137,6 +139,9 @@ class NotificationSender:
             raise SenderNotTrusted()
 
     def clear_curr(self):
+        """
+        Clear all temporary value of this sender.
+        """
         self.curr_sender = None
         self.curr_receiver = None
         self.curr_content = None
@@ -156,8 +161,8 @@ class NotificationSender:
         """
         self.curr_sender = sender if sender is not None else self.sender
         self.curr_receiver = receiver if receiver is not None else self.receiver
-        self.curr_content = content
         self.curr_session = session if session is not None else self.session
+        self.curr_content = content
         self.curr_orm_notification = orm_notification
 
     async def send(
@@ -171,13 +176,17 @@ class NotificationSender:
 
         Return the ORM instance of sent notification if success
         """
+
         self.init_curr(content=content, receiver=receiver, session=ss)
 
         # before callback
         try:
             await self.callback_manager.trigger("before", self)
         except CallbackInterrupted:
-            return
+            # Callback interrupted signal detected. This means some of callback wants to stop
+            # the execution of this message sending process, so return directly.
+            logger.debug("Callback interrupted a message sending process.")
+            return None
 
         # validity check
         self.check_validity()
@@ -194,7 +203,10 @@ class NotificationSender:
         try:
             await self.callback_manager.trigger("upon", self)
         except CallbackInterrupted:
-            return
+            # Callback interrupted signal detected. This means some of callback wants to stop
+            # the execution of this message sending process, so return directly.
+            logger.debug("Callback interrupted a message sending process.")
+            return None
 
         # add to database
         assert self.curr_session is not None
@@ -206,7 +218,10 @@ class NotificationSender:
         try:
             await self.callback_manager.trigger("after", self)
         except CallbackInterrupted:
-            return self.curr_orm_notification
+            logger.error(
+                "Callback interrput signal received after a message is sent. Singal does no effect"
+            )
+            pass
 
         return self.curr_orm_notification
 
@@ -241,22 +256,29 @@ async def get_notifications(
             param_name="sent, received",
             message="sent and received param could not both be false",
         )
+
+    # force to use a pagination config, if None, use default one.
     pagination = pagination or gene_sche.PaginationConfig()
 
-    # basic stmt
-    basic_stmt = (
+    # basic stmt, used to generated stmt to retrieve sent and received message.
+    _basic_stmt = (
         select(orm.Notification)
         .select_from(orm.User)
         .where(orm.User.user_id == user.user_id)
     )
 
     # sent and received filter
-    sent_notification = basic_stmt.join(orm.User.sent_notifications)
-    # logger.debug((await ss.scalars(sent_notification)).all())
-    received_notification = basic_stmt.join(orm.User.received_notifications)
-    # logger.debug((await ss.scalars(received_notification)).all())
+    sent_notification = _basic_stmt.join(orm.User.sent_notifications)
+    received_notification = _basic_stmt.join(orm.User.received_notifications)
 
     # union sent/received notifications based on param
+    # unioned condition will be used as subquery, which determines the basic message range.
+    #
+    # That is,
+    # - if `sent` is selected, then all message sent by user will be included in subquery
+    # - if `received` is selected, then similarly.
+    #
+    # All following processes on the return notifications is based on the result of this subquery.
     selected = []
     if sent:
         selected.append(sent_notification)

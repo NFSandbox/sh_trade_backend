@@ -124,15 +124,26 @@ class NotificationContentOut(DbSchemaBaseModel):
     """
     Base pydantic model for Notification.content ORM columns.
 
-    Do not use this base class or all of its subclasses directly.
+    Do not use this base class or all of its subclasses directly when marking response type etc.
     Instead, use the union type `NotificationContentOutUnion` or
     `NotificationOut` model class.
     """
 
     content_type: Literal["text"] = "text"
+    """The data format of this message, generally determined how to deal with and display this message."""
 
     category: str = "basic"
+    """
+    The contextual type of this message, related to the actual content of this notifications.
+    
+    For example:
+    
+    - if this message is sent by other user, then the category could be `direct_msg`.
+    - if this message is a system notification, then it could have category like: `system`.
+    """
+
     title: str
+
     message: str
 
     class Config:
@@ -154,7 +165,7 @@ class MarkDownNotificationContentOut(NotificationContentOut):
     on the client browser
     """
 
-    content_type: Literal["markdown"] = "markdown"
+    content_type: Literal["markdown"] = "markdown"  # type: ignore
 
     trusted: bool = False
 
@@ -169,7 +180,7 @@ class URLActionNotificationContentOut(MarkDownNotificationContentOut):
     - `actions` List of URL-redirect actions. Check out `URLAction`
     """
 
-    content_type: Literal["url_action"] = "url_action"
+    content_type: Literal["url_action"] = "url_action"  # type: ignore
 
     class URLAction(DbSchemaBaseModel):
         """
