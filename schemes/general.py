@@ -163,7 +163,7 @@ async def validate_result[ClsType](ss: AsyncSession, data, cls: ClsType):
 
     Note:
 
-    - If the `data` is ORM
+    - If the `data` is ORM clss, then the `ss` must be the session that bind with this ORM class instance.
     """
     # check attributes
     if not hasattr(cls, "model_validate"):
