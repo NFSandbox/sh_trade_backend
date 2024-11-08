@@ -22,13 +22,19 @@ from exception import error as exc
 item_router = APIRouter()
 
 
-@item_router.get("", response_model=List[db_sche.ItemOut])
+@item_router.post(
+    "", response_model=gene_sche.PaginatedResultOut[List[db_sche.ItemOut]]
+)
 async def get_items_of_user(
     ss: SessionDep,
     user: CurrentUserOrNoneDep,
     user_id: int | None = None,
     ignore_sold: bool = False,
     time_desc: bool = True,
+    pagination: Annotated[
+        gene_sche.PaginationConfig | None,
+        Body(embed=True),
+    ] = None,
 ):
     """
     Get items of a user by user id.
@@ -38,6 +44,7 @@ async def get_items_of_user(
     - `user_id` Default to current user if ignored
     - `ignore_sold` Ignore all items that already been sold
     - `time_desc` If `True`, result sorted by created time desc order, else by asc order
+    - `pagination` Specified the pagination config of result, could be None.
 
     Notes:
 
@@ -58,13 +65,16 @@ async def get_items_of_user(
         full_access = True
 
     # retrieve info
-    return await item_provider.get_user_items(
+    res = await item_provider.get_user_items(
         ss,
         user_id,
         ignore_hide=not full_access,
         ignore_sold=ignore_sold,
         time_desc=time_desc,
+        pagination=pagination,
     )
+
+    return res
 
 
 @item_router.post(

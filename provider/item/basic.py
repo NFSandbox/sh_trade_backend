@@ -51,10 +51,15 @@ async def get_user_items(
     ignore_hide: bool = True,
     ignore_sold: bool = False,
     load_tags: bool = True,
+    pagination: gene_sche.PaginationConfig | None = None,
 ):
     """
     Get selling items of a user by user id
     """
+    # use default pagination
+    if pagination is None:
+        pagination = gene_sche.PaginationConfig()
+
     # promise user is valid
     user = await get_user_from_user_id(ss, user_id)
 
@@ -89,10 +94,19 @@ async def get_user_items(
     if ignore_sold:
         stmt = stmt.where(orm.Item.state != orm.ItemState.sold)
 
-    res = await ss.scalars(stmt)
-    res = res.all()
+    # get total count
+    total_count = await ss.scalar(
+        select(func.count(orm.Item.item_id)).select_from(stmt.subquery())
+    )
 
-    return res
+    # apply paginations
+    stmt = pagination.use_on(stmt)
+
+    _res = await ss.scalars(stmt)
+
+    res = _res.all()
+    assert total_count is not None
+    return gene_sche.PaginatedResult(total=total_count, pagination=pagination, data=res)
 
 
 async def get_user_item_count(ss: SessionDep, user_id: int) -> int:
