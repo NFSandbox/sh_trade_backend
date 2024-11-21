@@ -70,6 +70,11 @@ class ItemOut(DbSchemaBaseModel):
         from_attributes = True
 
 
+class ItemDetailedOut(ItemOut):
+    seller: UserOut
+    
+
+
 class ItemIn(DbSchemaBaseModel):
     name: str = Field(max_length=20)
     description: str = Field(max_length=2000)

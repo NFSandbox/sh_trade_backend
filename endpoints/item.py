@@ -14,6 +14,7 @@ from provider import user as user_provider
 from provider import database as db_provider
 from provider import item as item_provider
 from provider.user import CurrentUserDep, CurrentUserOrNoneDep
+from provider.auth import PermissionsChecker
 
 from provider.database import SessionDep
 from exception import error as exc
@@ -75,6 +76,21 @@ async def get_items_of_user(
     )
 
     return res
+
+
+@item_router.get("/detailed", response_model=db_sche.ItemDetailedOut)
+async def get_item_detailed_info(
+    q: Annotated[bool, Depends(PermissionsChecker({"item:get:detailed"}))],
+    ss: SessionDep,
+    item_id: int,
+):
+    """
+    Get detailed info of an item
+    """
+    # get item
+    item = await item_provider.get_item_detailed_info(ss, item_id)
+
+    return item
 
 
 @item_router.post(

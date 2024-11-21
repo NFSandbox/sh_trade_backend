@@ -33,6 +33,12 @@ __all__ = [
 
 
 async def get_item_by_id(ss: SessionDep, item_id: int):
+    """
+    Get item using item_id
+
+    Raises:
+        exc.NoResultError: if item not found
+    """
     # get item
     try:
         item = await ss.get(orm.Item, item_id)
@@ -190,7 +196,7 @@ async def remove_items_cascade(
     asso_fav_items = await get_cascade_fav_items_by_items(ss, items)
 
     fav_count = await remove_fav_items_cascade(ss, asso_fav_items, commit=False)
-    
+
     # todo
     # remove all related trade record
 

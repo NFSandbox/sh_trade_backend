@@ -82,3 +82,19 @@ async def remove_fav_items_cascade(
         await try_commit(ss)
 
     return [count]
+
+
+async def get_fav_count_of_item(ss: SessionDep, item: orm.Item):
+    """
+    Given an orm Item object, get its favourite count.
+    """
+    item_id = item.item_id
+
+    stmt = (
+        select(func.count())
+        .select_from(orm.AssociationUserFavouriteItem)
+        .where(orm.AssociationUserFavouriteItem.item_id == item_id)
+    )
+
+    res = await ss.scalar(stmt)
+    return res if res is not None else 0

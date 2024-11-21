@@ -18,7 +18,7 @@ from schemes import general as gene_sche
 
 from ..database import init_session_maker, session_maker, SessionDep, try_commit
 from ..user.core import CurrentUserDep, CurrentUserOrNoneDep, get_user_from_user_id
-from ..fav.core import get_cascade_fav_items_by_items, remove_fav_items_cascade
+from ..fav.core import get_fav_count_of_item
 
 from .core import *
 
@@ -213,6 +213,27 @@ async def remove_tags_of_item(ss: SessionDep, item: orm.Item):
         raise
 
     return item
+
+
+async def get_item_detailed_info(
+    ss: SessionDep, item_id: int
+) -> db_sche.ItemDetailedOut:
+    """
+    Get detailed info of an item
+    """
+    # get item orm
+    item = await get_item_by_id(ss, item_id)
+    await ss.refresh(item, ["seller", "questions"])
+
+    # get fav count
+    fav_count = await get_fav_count_of_item(ss, item)
+
+    return db_sche.ItemDetailedOut.model_validate(
+        {
+            **item.__dict__,
+            "fav_count": fav_count,
+        }
+    )
 
 
 async def add_item(

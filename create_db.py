@@ -205,7 +205,7 @@ async def async_main(
             "\n-h           Show help text"
             "\n-y           Confirm action, compulsory when execute without --no-drop"
             "\n--no-drop    Do not drop previous table when exists"
-            "\n--clear-st   Reinitialize self-hosted supertoken info"
+            "\n--clear-st   Reinitialize self-hosted supertoken info database"
         )
         return
 
