@@ -227,13 +227,9 @@ async def get_item_detailed_info(
 
     # get fav count
     fav_count = await get_fav_count_of_item(ss, item)
+    item.fav_count = fav_count
 
-    return db_sche.ItemDetailedOut.model_validate(
-        {
-            **item.__dict__,
-            "fav_count": fav_count,
-        }
-    )
+    return await ss.run_sync(lambda ss: db_sche.ItemDetailedOut.model_validate(item))
 
 
 async def add_item(

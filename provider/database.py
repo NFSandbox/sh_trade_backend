@@ -48,7 +48,7 @@ def init_session_maker(force_create: bool = False):
 async def get_session():
     """Get a new session using session maker
 
-    Notes:
+    Usage With FastAPI:
 
     This function could be used as FastAPI dependency.
     Once you get the returned `Session` object, it must be used in Context Manager pattern like below:
@@ -56,7 +56,18 @@ async def get_session():
         async with get_session() as session:
             session.execute(...)
 
-    Otherwise, the Session may never be closed properly
+    Otherwise, the Session may never be closed properly.
+    
+    Use Independently:
+    
+    When using this function without FastAPI, you should use another util function to convert 
+    this function into context manager (which actually automatically done in FastAPI)
+    
+        from contextlib import asynccontextmanager
+        
+        session_mgr = asynccontextmanager(get_session())
+        async with session_mgr() as session:
+            session.execute(...)
     """
     maker = init_session_maker()
     async with maker() as session:

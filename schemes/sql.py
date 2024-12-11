@@ -10,7 +10,17 @@ from loguru import logger
 from pydantic import BaseModel
 
 # sqlalchemy basics
-from sqlalchemy import Select, BIGINT, String, JSON, ForeignKey, Column, Table
+from sqlalchemy import (
+    Select,
+    BIGINT,
+    String,
+    JSON,
+    ForeignKey,
+    Column,
+    Table,
+    select,
+    func,
+)
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -18,6 +28,8 @@ from sqlalchemy.orm import (
     mapped_column,
     relationship,
     MappedAsDataclass,
+    column_property,
+    ColumnProperty,
 )
 from sqlalchemy.sql.type_api import TypeEngine
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +44,7 @@ from sqlalchemy_easy_softdelete.hook import IgnoredTable
 
 # sqlalchemy json
 from sqlalchemy_json import NestedMutableJson
+from sqlalchemy import func
 
 
 # using datetime to get utc timestamp
@@ -346,8 +359,20 @@ class Question(SQLBaseModel):
 
 
 class TagsType(Enum):
+    """
+    Enum type used to mark the type of a tag in system.
+
+    For more info, checkout member field docstring.
+    """
+
     original = "original"
+    """The basic tag type with no semantic meaning"""
+
+    position = "position"
+    """Tags that used to mark some positions"""
+
     user_created = "user_created"
+    """User-created custom tags"""
 
 
 class Tag(SQLBaseModel):
@@ -452,3 +477,11 @@ class Notification(SQLBaseModel):
     receiver: Mapped["User"] = relationship(
         back_populates="received_notifications", foreign_keys=receiver_id
     )
+
+
+Tag.used_count = column_property(
+    select(func.count(AssociationItemTag.association_items_tags_id))
+    .select_from(AssociationItemTag)
+    .where(AssociationItemTag.tag_id == Tag.tag_id)
+    .scalar_subquery(),
+)
