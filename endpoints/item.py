@@ -78,6 +78,28 @@ async def get_items_of_user(
     return res
 
 
+@item_router.get("/recent", response_model=list[db_sche.ItemOut])
+async def get_recently_published(
+    q: Annotated[bool, Depends(PermissionsChecker({"item:recent"}))],
+    ss: SessionDep,
+):
+    """
+    Get recently published item on this website
+    """
+    recent_item = await item_provider.get_recent_published(ss)
+
+    def validate(ss):
+        nonlocal recent_item
+
+        recent_item_res = []
+        for i in recent_item:
+            recent_item_res.append(db_sche.ItemOut.model_validate(i))
+
+        return recent_item_res
+
+    return await ss.run_sync(validate)
+
+
 @item_router.get("/detailed", response_model=db_sche.ItemDetailedOut)
 async def get_item_detailed_info(
     q: Annotated[bool, Depends(PermissionsChecker({"item:get:detailed"}))],

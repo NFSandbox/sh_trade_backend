@@ -16,4 +16,5 @@ from .basic import (
     add_tags_if_not_exists,
     remove_tags_of_item,
     get_item_detailed_info,
+    get_recent_published,
 )

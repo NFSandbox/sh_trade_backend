@@ -28,6 +28,7 @@ from exception import error as exc
 init_session_maker()
 
 __all__ = [
+    "get_recent_published",
     "get_user_item_count",
     "update_tags_of_item",
     "add_item",
@@ -42,6 +43,14 @@ __all__ = [
     "remove_tags_of_item",
     "get_user_items",
 ]
+
+
+async def get_recent_published(ss: SessionDep):
+    """
+    Get list of items that published recently
+    """
+    stmt = select(orm.Item).order_by(orm.Item.created_time.desc()).limit(50)
+    return (await ss.scalars(stmt)).all()
 
 
 async def get_user_items(
