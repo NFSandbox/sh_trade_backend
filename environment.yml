@@ -59,4 +59,8 @@ dependencies:
   - pip:
     - aiomysql==0.2.0
     - pymysql==1.1.1
+    - supertokens-python
+    - httpx
+    - asyncer
+    - telegram
 prefix: C:\ProgramData\Anaconda3\envs\sh_trade

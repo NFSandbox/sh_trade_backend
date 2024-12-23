@@ -9,13 +9,6 @@ from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from fastapi import APIRouter, Query, Depends, Request, Response, status, Body
 from fastapi.responses import JSONResponse
-from fastapi.exceptions import HTTPException
-
-from supertokens_python.recipe.emailpassword.asyncio import sign_in, sign_up
-from supertokens_python.recipe.emailpassword.interfaces import (
-    SignInOkResult,
-    SignInWrongCredentialsError,
-)
 
 from sqlalchemy.exc import MultipleResultsFound
 
