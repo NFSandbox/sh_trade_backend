@@ -28,7 +28,6 @@ from config import general as gene_config
 def get_token_transfer_method(
     req: BaseRequest, for_create_new_session: bool, user_context: Dict[str, Any]
 ):
-    # OR use session.init(get_token_transfer_method=lambda *_: "header")
     return "cookie"
 
 
@@ -48,7 +47,8 @@ init(
     framework="fastapi",
     recipe_list=[
         session.init(
-            get_token_transfer_method=get_token_transfer_method
+            # get_token_transfer_method=get_token_transfer_method
+            cookie_same_site="none",
         ),  # initializes session features
         # thirdparty.init(
         # ),
