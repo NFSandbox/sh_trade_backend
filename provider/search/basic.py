@@ -348,6 +348,13 @@ class Searcher:
         # apply pagination
         stmt_with_pagination = self.pagination.use_on(stmt_with_filter)
 
+        # apply tag eager loading
+        stmt_with_pagination = stmt_with_pagination.options(
+            selectinload(orm.Item.association_tags).options(
+                selectinload(orm.AssociationItemTag.tag)
+            )
+        )
+
         # query final result
         res = (await ss.scalars(stmt_with_pagination)).all()
 

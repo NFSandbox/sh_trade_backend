@@ -45,7 +45,7 @@ async def search_items_by_tags(
     pagination: gene_sche.PaginationConfig | None = None,
 ):
     """
-    Search items by name
+    Search items by tag
     """
     searcher = Searcher(keyword, pagination=pagination)
     return await searcher.by_tags_search(ss)

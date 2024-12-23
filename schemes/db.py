@@ -19,6 +19,7 @@ class UserOut(DbSchemaBaseModel):
     username: str
     description: str | None = None
     created_time: int
+    role_name_list: list[str]
 
 
 class UserIn(DbSchemaBaseModel):
@@ -72,7 +73,6 @@ class ItemOut(DbSchemaBaseModel):
 
 class ItemDetailedOut(ItemOut):
     seller: UserOut
-    
 
 
 class ItemIn(DbSchemaBaseModel):
